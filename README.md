@@ -14,7 +14,7 @@ Cette application Streamlit sert de système d'alerte précoce aux crues pour le
 | 6 · Hydrogrammes | Observé / corrigé (/ brut) pour chaque échéance, zoom et curseur temporel |
 | 7 · Tendances et crues | Mann-Kendall modifié et pente de Sen, Gumbel / GEV / Normale (AIC), périodes de retour, jours critiques, détection par GloFAS |
 | Guide et méthodes | Mode d'emploi détaillé et explication de toutes les méthodes (correction, critères, tendances, crues, limites) |
-| 8 · Prévision à 7 jours | Tableau des stations à prévoir (compléter des coordonnées ou ajouter n'importe quelle station du Burundi), téléchargement de GloFAS (ensemble de 51 membres), saisie du débit observé du jour, prévision corrigée, niveaux d'alerte, exports |
+| 8 · Prévision | **Une station** : interface de prévision des inondations (téléchargement GloFAS automatique, par clé Copernicus ou fichier NetCDF ; coordonnées ; seuils Rouge/Orange/Jaune/Vert ; observation du jour ; nombre de jours ; graphique et zone de messages). **Toutes les stations** : tableau des stations à prévoir (compléter des coordonnées ou ajouter n'importe quelle station du Burundi), téléchargement de GloFAS (ensemble de 51 membres), saisie du débit observé du jour, prévision corrigée, niveaux d'alerte, exports |
 
 Tous les graphiques sont interactifs : survol, zoom, clic sur la légende pour masquer une série, et l'icône 📷 pour télécharger une image PNG haute résolution.
 
@@ -36,7 +36,7 @@ Q_GloFAS,L(t₀) est la prévision à L jours émise il y a L jours pour aujourd
 
 ### Niveaux d'alerte
 
-Par défaut, l'application calcule trois seuils sur les débits observés historiques : Q90, la crue de 2 ans et la crue de 5 ans (loi de Gumbel). Elle les classe par ordre croissant pour former 🟡 Vigilance, 🟠 Alerte et 🔴 Alerte maximale. Ces seuils se modifient dans la page 7 (par exemple pour mettre les seuils officiels).
+Par défaut, l'application calcule trois seuils sur les débits observés historiques : Q90, la crue de 2 ans et la crue de 5 ans (loi de Gumbel). Elle les classe par ordre croissant pour former 🟡 Vigilance, 🟠 Alerte et 🔴 Alerte maximale. Ces seuils se modifient dans la page 8 (par exemple pour mettre les seuils officiels).
 
 ## Lancer l'application sur votre ordinateur
 
@@ -67,7 +67,17 @@ L'application s'ouvre dans le navigateur (http://localhost:8501). En local, l'ar
 
 > **Données d'exemple.** Le dépôt contient les données de 9 stations IGEBU (`data/sample/stations/`) : toute personne qui ouvre l'application peut cliquer sur « Essayer avec les données d'exemple » et évaluer les performances sans avoir ses propres observations.
 >
-> **Archive en ligne.** Sur Streamlit Cloud, les fichiers écrits par l'application ne sont pas conservés. Téléchargez l'archive (`forecast_archive.csv`) après chaque utilisation, et rechargez-la la fois suivante dans la page 7.
+> **Archive en ligne.** Sur Streamlit Cloud, les fichiers écrits par l'application ne sont pas conservés. Téléchargez l'archive (`forecast_archive.csv`) après chaque utilisation, et rechargez-la la fois suivante dans la page 8.
+
+## Téléchargement automatique de GloFAS
+
+La page 8 récupère la prévision GloFAS de trois façons :
+
+- **Automatique** (par défaut, sans clé) : API Open-Meteo Flood, contrôle et 50 membres, jusqu'à 30 jours ;
+- **Copernicus (clé API)** : fichier NetCDF officiel du jeu `cems-glofas-forecast` sur le Early Warning Data Store (https://ewds.climate.copernicus.eu). Il faut un compte gratuit, accepter une fois la licence du jeu de données, puis coller sa clé (*API Token*) dans la page. Zone par défaut : le Burundi (lat. −4,50 à −2,25, long. 28,95 à 30,90) ;
+- **Fichier NetCDF** : un fichier GloFAS déjà téléchargé (variable `dis24`).
+
+L'application prend la maille la plus proche des coordonnées saisies et l'écrit dans la zone *Messages*.
 
 ## Format des données (une station à la fois)
 
@@ -95,12 +105,14 @@ Le tracé de la rivière vient d'OpenStreetMap (API Overpass) : la rivière est 
 app.py                 point d'entrée Streamlit (navigation)
 app_state.py           état partagé et calculs mis en cache
 pages/                 une page par étape (stations, fiche et carte, analyses, prévision)
+forecast_batch.py      onglet « Toutes les stations » de la page Prévision
 ews/                   la méthodologie, indépendante de l'interface
   data_io.py           lecture des fichiers, contrôle qualité
   correction.py        correction en temps réel, prévision opérationnelle, archive
   metrics.py           KGE, NSE, PBIAS, RSR, tableau de contingence
   statistics.py        Mann-Kendall modifié, Sen, Gumbel/GEV/Normale, jours critiques
   glofas_api.py        API Open-Meteo Flood (GloFAS v4), recherche de maille
+  glofas_netcdf.py     téléchargement Copernicus EWDS (cdsapi) et lecture des fichiers NetCDF
   geo.py               carte Folium, tracé des rivières (OpenStreetMap), export GeoJSON
   plots.py             graphiques Plotly interactifs
   theme.py             couleurs et style de l'application et des graphiques
@@ -112,6 +124,6 @@ Les tests (`pytest -q tests/test_core.py`) vérifient que le code retrouve les r
 
 ## Sources des données
 
-- GloFAS v4 : Copernicus Emergency Management Service (CEMS), via l'API Open-Meteo Flood (https://open-meteo.com/en/docs/flood-api). Données sous licence CC BY 4.0. L'API est gratuite et sans clé pour un usage non commercial ; l'application gère la limite de requêtes par minute.
+- GloFAS v4 : Copernicus Emergency Management Service (CEMS), via l'API Open-Meteo Flood (https://open-meteo.com/en/docs/flood-api) ou le Copernicus Early Warning Data Store. Données sous licence CC BY 4.0. L'API est gratuite et sans clé pour un usage non commercial ; l'application gère la limite de requêtes par minute.
 - Débits observés : Institut Géographique du Burundi (IGEBU).
 - Cours d'eau et fonds de carte : © contributeurs OpenStreetMap (ODbL), OpenTopoMap, Esri World Imagery.

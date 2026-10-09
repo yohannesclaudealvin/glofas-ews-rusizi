@@ -159,3 +159,42 @@ def basin_map_plotly(meta: pd.DataFrame, color_col: str | None = None):
                                                                      lon=m["lon"].mean() if len(m) else 29.3), zoom=8.3),
                       height=430, margin=dict(l=0, r=0, t=0, b=0), showlegend=False)
     return fig
+
+
+def forecast_panel(station: str, res: pd.DataFrame, q_obs: float, today, thresholds: dict, show: str = "Les deux"):
+    """Forecast chart of the 'one station' interface: alert zones in the background (green / yellow / orange / red),
+    corrected and/or raw forecast, ensemble band, today's observation."""
+    fig = go.Figure()
+    x = list(pd.to_datetime(res["valid_date"]))
+    t0 = pd.Timestamp(today)
+    ymax = max([q_obs] + list(res["glofas_raw"] if show != "Corrigée" else []) +
+               list(res.get("cor_max", res["corrected"])) + [v for v in thresholds.values() if v]) * 1.12
+    zones = [("Vert", 0, thresholds.get("Jaune")), ("Jaune", thresholds.get("Jaune"), thresholds.get("Orange")),
+             ("Orange", thresholds.get("Orange"), thresholds.get("Rouge")), ("Rouge", thresholds.get("Rouge"), ymax)]
+    zc = {"Vert": "rgba(12,163,12,0.07)", "Jaune": "rgba(250,178,25,0.12)", "Orange": "rgba(236,131,90,0.14)",
+          "Rouge": "rgba(208,59,59,0.12)"}
+    for name, lo, hi in zones:
+        if lo is None or hi is None or hi <= lo:
+            continue
+        wide = (hi - lo) > 0.07 * ymax                      # no label on thin bands (labels would overlap)
+        fig.add_hrect(y0=lo, y1=hi, fillcolor=zc[name], line_width=0, layer="below")
+        if wide:
+            fig.add_annotation(x=1, xref="paper", xanchor="right", y=hi, yanchor="top", text=name,
+                               showarrow=False, font=dict(size=11, color=T.MUTED))
+    if show in ("Corrigée", "Les deux") and {"cor_min", "cor_max"} <= set(res.columns):
+        fig.add_trace(go.Scatter(x=x + x[::-1], y=list(res["cor_max"]) + list(res["cor_min"][::-1]), fill="toself",
+                                 fillcolor=T.BAND, line=dict(width=0), mode="lines", name="Ensemble corrigé (min–max)",
+                                 hoverinfo="skip"))
+    if show in ("Brute", "Les deux"):
+        fig.add_trace(go.Scatter(x=x, y=res["glofas_raw"], name="Prévision brute GloFAS", mode="lines+markers",
+                                 line=dict(color=T.RAW, width=2, dash="dot"), marker=dict(size=6)))
+    if show in ("Corrigée", "Les deux"):
+        fig.add_trace(go.Scatter(x=[t0] + x, y=[q_obs] + list(res["corrected"]), name="Prévision corrigée",
+                                 mode="lines+markers", line=dict(color=T.BLUE, width=3), marker=dict(size=7)))
+    fig.add_trace(go.Scatter(x=[t0], y=[q_obs], name="Observation du jour", mode="markers",
+                             marker=dict(color=T.INK, size=13, symbol="diamond")))
+    fig.update_layout(title=f"{station} – prévision du {t0:%d/%m/%Y} sur {len(res)} jour(s)", height=440,
+                      yaxis=dict(title="Débit (m³/s)", range=[0, ymax]), hovermode="x unified",
+                      legend=dict(orientation="h", yanchor="top", y=-0.14, xanchor="left", x=0),
+                      margin=dict(t=60, b=40))
+    return fig

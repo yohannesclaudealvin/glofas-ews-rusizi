@@ -48,13 +48,43 @@ tendances et crues de référence. Les graphiques sont interactifs : on zoome à
 masque ou affiche une courbe, et l'appareil photo en haut à droite enregistre l'image en haute résolution. Chaque
 tableau se télécharge en CSV.
 
-**8. Prévision à 7 jours.** C'est la page de tous les jours. Le tableau *Stations à prévoir* reprend les stations
-chargées ; on peut y compléter des coordonnées manquantes ou ajouter une ligne pour n'importe quelle autre station du
-Burundi, même sans historique (il suffit de son nom et de ses coordonnées). On saisit ensuite le débit observé le
-matin à chaque station et on lance le calcul. L'application télécharge la dernière prévision GloFAS, la corrige et affiche pour chaque
-station la prévision des sept prochains jours, la fourchette donnée par l'ensemble des 51 scénarios de GloFAS et
-le niveau d'alerte. Les résultats se téléchargent en CSV. Pour une station sans historique, les seuils d'alerte et la
-fiabilité ne peuvent pas être calculés : saisissez les seuils à la main dans le tableau prévu.
+**8. Prévision.** C'est la page de tous les jours. Elle a deux onglets.
+
+*Prévision d'une station* reprend la disposition de l'interface de prévision des inondations : à gauche les
+réglages, à droite le graphique et les messages.
+
+- **Télécharger.** Trois façons d'obtenir la prévision GloFAS. *Automatique* : rien à faire, la dernière
+  prévision (contrôle et 50 membres) est téléchargée au moment d'exécuter, sans clé. *Copernicus (clé API)* : on
+  colle sa clé, on garde ou on change les limites de la zone (le Burundi par défaut), on choisit la date et on
+  clique OK ; l'application récupère le fichier NetCDF officiel de GloFAS pour 30 jours. Cela prend d'une à
+  quelques minutes, selon la file d'attente de Copernicus. *Fichier NetCDF* : on charge un fichier déjà téléchargé.
+- **Prévision.** On choisit la station (ou « nouvelle station », avec son nom et sa rivière), on vérifie sa
+  longitude et sa latitude, puis on règle les seuils. Au-dessus du seuil rouge le niveau est rouge, entre l'orange
+  et le rouge il est orange, entre le jaune et l'orange il est jaune, et sous le seuil jaune tout est vert. On
+  saisit l'observation du jour et le nombre de jours à prévoir, puis on clique EXÉCUTER. Au-delà de 7 jours, la
+  prévision corrigée reste calculable mais elle n'a pas été évaluée sur l'historique : à lire avec prudence.
+- **Vérifier la position sur le cours d'eau** affiche une carte avec le point et la rivière d'après OpenStreetMap.
+  Si le point tombe à côté de la rivière, corrigez les coordonnées avant de lancer la prévision.
+- **Le graphique** montre l'observation du jour, la prévision brute, la prévision corrigée et la fourchette des
+  51 scénarios, sur fond de couleurs d'alerte. On peut afficher la corrigée, la brute ou les deux, et tout
+  télécharger : le graphique (HTML), les données (CSV) et l'archive.
+- **Messages** garde la trace de ce qui s'est passé : fichier chargé, maille GloFAS utilisée, correction appliquée,
+  et les erreurs en rouge (clé refusée, coordonnées manquantes…).
+
+*Toutes les stations* traite toutes les stations d'un coup. Le tableau *Stations à prévoir* reprend les stations
+chargées ; on peut y compléter des coordonnées ou ajouter n'importe quelle autre station du Burundi. On saisit le
+débit observé à chaque station et on lance le calcul ; un tableau résume le niveau d'alerte de chacune.
+
+### Obtenir une clé Copernicus
+
+La voie *Automatique* suffit dans la plupart des cas. Pour travailler avec les fichiers officiels :
+
+1. créez un compte gratuit sur https://ewds.climate.copernicus.eu (Early Warning Data Store) ;
+2. ouvrez le jeu de données *GloFAS forecasts* (`cems-glofas-forecast`) et acceptez sa licence en bas de la page
+   *Download* (une seule fois) ;
+3. copiez votre clé personnelle (*API Token*) depuis votre profil et collez-la dans la page Prévision.
+
+La clé n'est ni enregistrée ni affichée ; il faut la recoller à chaque visite.
 
 ### L'archive des prévisions
 
@@ -68,7 +98,8 @@ recharger la fois suivante. Sur un ordinateur où l'application est installée, 
 Par défaut, trois seuils sont calculés à partir des débits observés de la station : le débit dépassé 10 % du temps
 (Q90), la crue qui revient en moyenne tous les 2 ans et celle qui revient tous les 5 ans. Ils sont rangés du plus
 petit au plus grand et donnent les niveaux **Vigilance**, **Alerte** et **Alerte maximale**. Si la protection civile
-ou l'IGEBU disposent de seuils officiels, il vaut mieux les saisir à la place dans le tableau prévu à cet effet.
+ou l'IGEBU disposent de seuils officiels, il vaut mieux les saisir à la place. Dans l'onglet *Prévision d'une
+station*, ces trois seuils pré-remplissent les cases jaune, orange et rouge.
 """)
 
 # ---------------------------------------------------------------------------------------------
@@ -216,7 +247,8 @@ faible doit être lue comme une tendance, pas comme un chiffre.
 
 ### Sources des données
 
-- Prévisions GloFAS v4 : Copernicus Emergency Management Service, via l'API Open-Meteo Flood.
+- Prévisions GloFAS v4 : Copernicus Emergency Management Service, via l'API Open-Meteo Flood ou le Early Warning
+  Data Store (jeu `cems-glofas-forecast`).
 - Débits observés : Institut Géographique du Burundi (IGEBU).
 - Cours d'eau et fonds de carte : contributeurs OpenStreetMap, OpenTopoMap, Esri.
 

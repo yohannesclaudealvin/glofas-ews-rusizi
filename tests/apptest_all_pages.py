@@ -53,11 +53,36 @@ mk = lambda b: pd.DataFrame({c: b + off + np.linspace(0, 20, 15) for c, off in
 at.session_state["manual_fc"] = {"RUSIZI": mk(500.0), "KABURANTWA": mk(15.0), "MPANDA": mk(50.0)}
 at.session_state["q_RUSIZI"] = 255.0; at.session_state["q_KABURANTWA"] = 30.0; at.session_state["q_MPANDA"] = 9.0
 at.run(); at.switch_page("pages/8_Prevision.py"); at.run()
-at.date_input[0].set_value(today.date()).run()
-at.button[0].click().run()
+at.date_input(key="batch_day").set_value(today.date()).run()
+next(b for b in at.button if b.label.startswith("Télécharger GloFAS")).click().run()
 print("forecast exceptions:", [e.value for e in at.exception])
 for df in at.dataframe:
     if "Niveau max (7 j)" in df.value.columns:
         print(df.value.to_string())
 ok &= not at.exception
+
+# single-station forecast from a GloFAS NetCDF file (synthetic, same layout as the Copernicus file)
+import io  # noqa: E402
+import xarray as xr  # noqa: E402
+t0 = pd.Timestamp("2026-10-09")
+lats, lons = np.arange(-2.275, -4.5, -0.05), np.arange(28.975, 30.9, 0.05)
+rng = np.random.default_rng(1)
+dis = 400 + 15 * np.arange(30)[None, :, None, None] + rng.normal(0, 20, (51, 30, 1, 1)) + 0 * lats[None, None, :, None] \
+      + 0 * lons[None, None, None, :]
+ds = xr.Dataset({"dis24": (("number", "step", "latitude", "longitude"), dis.astype("float32"))},
+                coords={"number": np.arange(51), "step": pd.to_timedelta(np.arange(1, 31), "D"),
+                        "latitude": lats, "longitude": lons, "forecast_reference_time": t0})
+ds = ds.assign_coords(valid_time=("step", (t0 + ds["step"].to_index()).values))
+buf = io.BytesIO(); ds.to_netcdf(buf, engine="h5netcdf")
+at = new_app()
+at.session_state["nc"] = (buf.getvalue(), "test.nc")
+at.run(); at.switch_page("pages/8_Prevision.py"); at.run()
+at.radio(key="one_source").set_value("Fichier NetCDF").run()
+at.number_input(key="obs_RUSIZI").set_value(255.0).run()
+at.button(key="one_run").click().run()
+res = at.session_state["one_res"]["res"] if "one_res" in at.session_state else None
+print("one-station exceptions:", [e.value for e in at.exception])
+print(res[["lead", "valid_date", "glofas_raw", "corrected", "niveau"]].to_string() if res is not None else "NO RESULT")
+print("\n".join(at.session_state["fc_log"][-3:]))
+ok &= not at.exception and res is not None and len(res) == 7
 print("ALL OK" if ok else "FAILURES")

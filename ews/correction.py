@@ -55,7 +55,8 @@ ENS_COLS = ["river_discharge", "river_discharge_min", "river_discharge_p25", "ri
 
 
 def operational_forecast(fc: pd.DataFrame, today: pd.Timestamp, q_obs_today: float,
-                         archive: pd.DataFrame | None = None, station: str | None = None) -> pd.DataFrame:
+                         archive: pd.DataFrame | None = None, station: str | None = None,
+                         leads=None) -> pd.DataFrame:
     """Correct a GloFAS forecast issued today with today's observation.
 
     fc      : DataFrame indexed by date (daily), columns from the GloFAS API
@@ -71,7 +72,7 @@ def operational_forecast(fc: pd.DataFrame, today: pd.Timestamp, q_obs_today: flo
         raise ValueError(f"The GloFAS series does not contain today's date {today.date()}")
     q_today = float(fc.loc[today, "river_discharge"])
     rows = []
-    for L in LEADS:
+    for L in (leads or LEADS):
         tv = today + pd.Timedelta(days=L)
         if tv not in fc.index:
             continue
@@ -112,11 +113,13 @@ class ForecastArchive:
         df["lead"] = df["lead"].astype(int)
         return df
 
-    def add(self, station: str, today, fc: pd.DataFrame):
+    def add(self, station: str, today, fc: pd.DataFrame, leads=None):
         today = pd.Timestamp(today).normalize()
         new = [{"station": station, "issue_date": today, "valid_date": today + pd.Timedelta(days=L), "lead": L,
                 "q": float(fc.loc[today + pd.Timedelta(days=L), "river_discharge"])}
-               for L in LEADS if today + pd.Timedelta(days=L) in fc.index]
+               for L in (leads or LEADS) if today + pd.Timedelta(days=L) in fc.index]
+        if not new:
+            return self
         self.df = pd.concat([self.df, pd.DataFrame(new)], ignore_index=True) if len(self.df) else pd.DataFrame(new)
         self.df = self._norm(self.df).drop_duplicates(["station", "issue_date", "lead"], keep="last")
         return self

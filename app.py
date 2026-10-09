@@ -20,7 +20,7 @@ pages = {
         st.Page("pages/7_Frequences.py", title="7 · Tendances et crues", icon="📊"),
     ],
     "Opérationnel": [
-        st.Page("pages/8_Prevision.py", title="8 · Prévision à 7 jours", icon="🚨"),
+        st.Page("pages/8_Prevision.py", title="8 · Prévision", icon="🚨"),
     ],
     "Aide": [
         st.Page("pages/9_Guide.py", title="Guide et méthodes", icon="📘"),
