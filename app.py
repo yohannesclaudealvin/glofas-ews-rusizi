@@ -22,5 +22,8 @@ pages = {
     "Opérationnel": [
         st.Page("pages/8_Prevision.py", title="8 · Prévision à 7 jours", icon="🚨"),
     ],
+    "Aide": [
+        st.Page("pages/9_Guide.py", title="Guide et méthodes", icon="📘"),
+    ],
 }
 st.navigation(pages).run()

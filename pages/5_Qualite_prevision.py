@@ -8,8 +8,6 @@ from ews.plots import heatmap
 
 page_setup("Qualité des prévisions d'événements", icon="🎯")
 obs, gl = require_stations()
-st.caption("Événement = débit ≥ seuil. FAR = taux de fausses alarmes b/(b+d) (Figure 4 de l'article), "
-           "LR = POD/FAR (le « RV » du texte), ROC = POD − FAR. Critère d'acceptabilité : LR ≥ 6.")
 
 c1, c2 = st.columns([2, 1])
 stations = c1.multiselect("Stations", usable_stations(obs, gl), default=usable_stations(obs, gl))

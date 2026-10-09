@@ -11,8 +11,7 @@ from ews.correction import ForecastArchive, operational_forecast
 from ews.glofas_api import fetch_forecast
 from ews.plots import forecast_chart
 
-page_setup("Prévision corrigée à 7 jours", "Saisissez le débit observé aujourd'hui ; l'application télécharge la "
-           "dernière prévision GloFAS (ensemble de 51 membres) et applique la correction en temps réel.", "🚨")
+page_setup("Prévision corrigée à 7 jours", icon="🚨")
 if not registry():
     st.warning("Aucune station chargée."); st.page_link("pages/1_Stations.py", label="Charger les stations"); st.stop()
 
@@ -71,18 +70,15 @@ q_today = {n: cols[i % len(cols)].number_input(f"{n} ({reg[n]['river']})", min_v
 
 obs = obs_wide()
 with st.expander("Seuils d'alerte par station (modifiables)"):
-    st.caption("Par défaut : Q90, crue de 2 ans et crue de 5 ans (Gumbel) calculés sur les débits observés, classés "
-               "par ordre croissant. Remplacez-les par les seuils officiels si vous en avez.")
+    st.caption("Par défaut : Q90, crue de 2 ans et crue de 5 ans. Remplacez-les par les seuils officiels si besoin.")
     if "thr_table" not in st.session_state or set(st.session_state["thr_table"]["Station"]) != set(ready):
         st.session_state["thr_table"] = pd.DataFrame(
             [{"Station": n, **{k: thresholds(obs, n).get(k, np.nan) for k in ORDER[1:]}} for n in ready])
     thr_tab = st.data_editor(st.session_state["thr_table"], hide_index=True, width="stretch",
                              column_config={"Station": st.column_config.TextColumn(disabled=True)})
 
-with st.expander("Archive des prévisions (formule de même échéance de l'article)"):
-    st.markdown("Chaque jour, la prévision GloFAS brute est ajoutée à l'archive. Après L jours, la prévision à L jours "
-                "valable aujourd'hui y figure, et la formule de l'article est appliquée automatiquement. En ligne, "
-                "**téléchargez l'archive après chaque utilisation et rechargez-la ici**.")
+with st.expander("Archive des prévisions"):
+    st.caption("Téléchargez l'archive après chaque utilisation et rechargez-la la fois suivante.")
     up = st.file_uploader("Charger l'archive (forecast_archive.csv)", type="csv")
     if up is not None:
         st.session_state["archive"] = ForecastArchive(pd.read_csv(up))

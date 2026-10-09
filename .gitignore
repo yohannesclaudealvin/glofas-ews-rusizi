@@ -4,5 +4,3 @@ __pycache__/
 .pytest_cache/
 # forecast archive created when the app runs locally
 archive/*.csv
-# IGEBU data: remove the next line ONLY if IGEBU allows the data to be public
-data/sample/

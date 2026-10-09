@@ -66,8 +66,7 @@ else:
         st.download_button("⬇️ Géométries (GeoJSON)",
                            geojson(name, s["river"], s["lat"], s["lon"], s["cell_lat"], s["cell_lon"], river_ways),
                            f"{name}.geojson", "application/geo+json", width="stretch")
-        st.caption("Le fichier HTML s'ouvre dans n'importe quel navigateur (fonds de carte : OSM, relief, satellite). "
-                   "Le GeoJSON s'ouvre dans QGIS / ArcGIS.")
+        st.caption("HTML : navigateur. GeoJSON : QGIS / ArcGIS.")
 
 # ------------------------------------------------------------------ observed series
 st.subheader("Débits observés")
@@ -75,8 +74,6 @@ chart(obs_series(obs, f"{name} – débit observé"))
 
 # ------------------------------------------------------------------ GloFAS cell finder
 with st.expander("🔎 Rechercher la bonne maille GloFAS pour cette station"):
-    st.markdown("Compare les mailles GloFAS voisines (rayon de 3 mailles ≈ 15 km) avec une série de référence. "
-                "Score = corrélation des moyennes mensuelles − |log(rapport des moyennes)|.")
     ref_kind = st.radio("Référence", ["Débits observés", "GloFAS historique (1 j)"], horizontal=True,
                         disabled=s["glofas"] is None)
     if st.button("Chercher la maille", disabled=s["lat"] is None):

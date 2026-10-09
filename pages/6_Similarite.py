@@ -16,5 +16,3 @@ show_raw = c2.toggle("Afficher GloFAS brut", value=False)
 
 k, n = kge(d[f"COR_{lead}J"], d["OBS"]), nse(d[f"COR_{lead}J"], d["OBS"])
 chart(hydrograph(d, lead, f"{name} – échéance {lead} jour(s) · KGE {k:.2f} · NSE {n:.2f}", show_raw))
-st.caption("Utilisez le curseur sous le graphique ou les boutons 1 an / 3 ans pour zoomer. Cliquez sur une "
-           "légende pour masquer ou afficher une série. Icône 📷 : télécharger l'image en haute résolution.")

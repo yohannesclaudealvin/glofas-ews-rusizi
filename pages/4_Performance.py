@@ -6,8 +6,7 @@ from ews.plots import heatmap, lead_lines
 page_setup("Correction et performance", icon="📈")
 obs, gl = require_stations()
 name = current_station(require_glofas=True)
-st.markdown(f"**Station : {name}** (changez de station dans la barre latérale)")
-st.latex(r"Q_{corr,L}(t) = Q_{GloFAS,L}(t) + \left[\,Q_{obs}(t-L) - Q_{GloFAS,L}(t-L)\,\right]")
+st.markdown(f"**Station : {name}**")
 
 perf = performance(obs, gl, name)
 d = corrected(obs, gl, name)

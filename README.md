@@ -13,6 +13,7 @@ Cette application Streamlit sert de système d'alerte précoce aux crues pour le
 | 5 · Qualité des prévisions | POD, FAR, LR, ROC, CSI avec un seuil au choix (débit moyen, quantile, période de retour, valeur fixe) |
 | 6 · Hydrogrammes | Observé / corrigé (/ brut) pour chaque échéance, zoom et curseur temporel |
 | 7 · Tendances et crues | Mann-Kendall modifié et pente de Sen, Gumbel / GEV / Normale (AIC), périodes de retour, jours critiques, détection par GloFAS |
+| Guide et méthodes | Mode d'emploi détaillé et explication de toutes les méthodes (correction, critères, tendances, crues, limites) |
 | 8 · Prévision à 7 jours | Téléchargement de GloFAS (ensemble de 51 membres), saisie du débit observé du jour, prévision corrigée, niveaux d'alerte, exports |
 
 Tous les graphiques sont interactifs : survol, zoom, clic sur la légende pour masquer une série, et l'icône 📷 pour télécharger une image PNG haute résolution.
@@ -64,7 +65,7 @@ L'application s'ouvre dans le navigateur (http://localhost:8501). En local, l'ar
    ```
 3. **Déployer.** Allez sur https://share.streamlit.io, connectez-vous avec GitHub, cliquez *Create app*, choisissez le dépôt, la branche `main` et le fichier `app.py`, puis *Deploy*. Vous obtenez une adresse publique du type `https://glofas-ews-rusizi.streamlit.app`.
 
-> **Données IGEBU.** Le fichier `.gitignore` exclut `data/sample/` (un fichier d'observations et un fichier GloFAS par station dans `data/sample/stations/`), pour que les données IGEBU ne soient pas rendues publiques sans autorisation. L'application en ligne fonctionne alors avec vos fichiers chargés dans la page 1. Si IGEBU autorise la publication, supprimez la ligne `data/sample/` du `.gitignore` : le bouton « Charger les données d'exemple » fonctionnera aussi en ligne.
+> **Données d'exemple.** Le dépôt contient les données de 9 stations IGEBU (`data/sample/stations/`) : toute personne qui ouvre l'application peut cliquer sur « Essayer avec les données d'exemple » et évaluer les performances sans avoir ses propres observations.
 >
 > **Archive en ligne.** Sur Streamlit Cloud, les fichiers écrits par l'application ne sont pas conservés. Téléchargez l'archive (`forecast_archive.csv`) après chaque utilisation, et rechargez-la la fois suivante dans la page 7.
 

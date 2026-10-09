@@ -5,10 +5,9 @@ from app_state import (SAMPLE_DIR, add_station, defaults, glofas_dict, load_samp
                        qc, registry, remove_station)
 from ews.data_io import load_glofas, load_station_observations
 
-page_setup("Stations", "Chargez les stations une par une : chaque rivière a son fichier d'observations et son "
-           "fichier GloFAS.", "📂")
+page_setup("Stations", icon="📂")
 
-with st.expander("Format des fichiers", expanded=not registry()):
+with st.expander("Format des fichiers"):
     c1, c2 = st.columns(2)
     c1.markdown("**Observations (une station)** – Excel ou CSV : 1ʳᵉ colonne = date, 2ᵉ colonne = débit (m³/s). "
                 "Si le fichier contient plusieurs colonnes, vous choisirez la bonne.")

@@ -5,7 +5,7 @@ from app_state import basin_performance, chart, meta_table, page_setup, require_
 from ews import theme as T
 from ews.plots import heatmap
 
-page_setup("Synthèse du bassin", "Performance de GloFAS, station par station et échéance par échéance.", "🗺️")
+page_setup("Synthèse du bassin", icon="🗺️")
 obs, gl = require_stations()
 all_st = usable_stations(obs, gl)
 stations = st.multiselect("Stations", all_st, default=all_st)
@@ -47,7 +47,5 @@ tab = cor.pivot(index="Station", columns="LeadTime", values="KGE")[["1D", "3D", 
 tab["NSE 7D"] = cor[cor["Lead"] == 7].set_index("Station")["NSE"]
 tab["Gain NSE 7D vs persistance"] = tab["NSE 7D"] - pers.xs(7, level="Lead")
 st.dataframe(tab.sort_values("KGE 1D", ascending=False).round(2), width="stretch")
-st.caption("Persistance = on prévoit la dernière observation. Un gain positif signifie que GloFAS corrigé apporte "
-           "de l'information au-delà de la dernière observation.")
 st.download_button("Télécharger toutes les performances (CSV)", perf.to_csv(index=False).encode(),
                    "performance_bassin.csv", "text/csv")

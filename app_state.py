@@ -37,9 +37,6 @@ def sidebar():
             st.caption(f"{len(names)} station(s) chargée(s)")
         else:
             st.info("Aucune station chargée.")
-        st.markdown("---")
-        st.caption("Correction en temps réel de GloFAS :  \n"
-                   "Q_corr,L(t) = Q_GloFAS,L(t) + [Q_obs(t−L) − Q_GloFAS,L(t−L)]")
 
 
 def embed_html(html: str, height: int = 560):

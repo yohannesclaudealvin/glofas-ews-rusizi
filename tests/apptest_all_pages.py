@@ -24,7 +24,7 @@ for o in sorted(SD.glob("*_observations.csv")):
 
 PAGES = ["pages/0_Accueil.py", "pages/1_Stations.py", "pages/2_Fiche_station.py", "pages/3_Bassin.py",
          "pages/4_Performance.py", "pages/5_Qualite_prevision.py", "pages/6_Similarite.py", "pages/7_Frequences.py",
-         "pages/8_Prevision.py"]
+         "pages/8_Prevision.py", "pages/9_Guide.py"]
 
 
 def new_app(station="RUSIZI"):
