@@ -6,10 +6,10 @@ import pandas as pd
 import pytest
 
 from ews.correction import ForecastArchive, correct_station, operational_forecast, performance_table
-from ews.data_io import load_sample, merge_station
+from ews.data_io import load_glofas, load_station_observations, merge_station
 from ews.statistics import annual_series, frequency_table, mk_hamed_rao
 
-SAMPLE = Path(__file__).parents[1] / "data" / "sample"
+SAMPLE = Path(__file__).parents[1] / "data" / "sample" / "stations"
 pytestmark = pytest.mark.skipif(not SAMPLE.exists(), reason="sample data not present")
 
 # values of Figure 3 / Table 2 of the paper (v2) - corrected forecasts
@@ -22,7 +22,11 @@ EXPECTED = {
 
 @pytest.fixture(scope="module")
 def data():
-    return load_sample(SAMPLE)
+    obs, gl = {}, {}
+    for st in EXPECTED:
+        obs[st] = load_station_observations(SAMPLE / f"{st}_observations.csv")[0]
+        gl[st] = load_glofas(SAMPLE / f"{st}_glofas.xlsx", f"{st}_glofas.xlsx")[1]
+    return pd.concat(obs, axis=1), gl
 
 
 @pytest.mark.parametrize("st", list(EXPECTED))

@@ -1,10 +1,10 @@
-station,river,lat,lon,notes
-RUSIZI,Rusizi (Gatumba),-3.325,29.225,GloFAS cell verified in the paper (May 2025 validation)
-KABURANTWA,Kaburantwa,-2.975,29.175,GloFAS cell verified in the paper (May 2025 validation)
-MPANDA,Mpanda,-3.275,29.275,GloFAS cell verified in the paper (May 2025 validation)
-NTAHANGWA,Ntahangwa,,,set coordinates with the cell finder
-MUTIMBUZI,Mutimbuzi,,,set coordinates with the cell finder
-KAGUNUZI,Kagunuzi,,,set coordinates with the cell finder
-MUHIRA,Muhira,,,set coordinates with the cell finder
-NYAKAGUNDA,Nyakagunda,,,set coordinates with the cell finder
-NYAMAGANA,Nyamagana,,,set coordinates with the cell finder
+station,river,lat,lon,cell_lat,cell_lon,notes
+RUSIZI,Rusizi,-3.325,29.225,-3.325,29.225,Gatumba. Coordonnées de la station approximatives (= maille GloFAS vérifiée) - à remplacer par les coordonnées IGEBU
+KABURANTWA,Kaburantwa,-2.975,29.175,-2.975,29.175,Coordonnées de la station approximatives (= maille GloFAS vérifiée) - à remplacer par les coordonnées IGEBU
+MPANDA,Mpanda,-3.275,29.275,-3.275,29.275,Coordonnées de la station approximatives (= maille GloFAS vérifiée) - à remplacer par les coordonnées IGEBU
+NTAHANGWA,Ntahangwa,,,,,à compléter
+MUTIMBUZI,Mutimbuzi,,,,,à compléter
+KAGUNUZI,Kagunuzi,,,,,à compléter
+MUHIRA,Muhira,,,,,à compléter
+NYAKAGUNDA,Nyakagunda,,,,,à compléter
+NYAMAGANA,Nyamagana,,,,,à compléter

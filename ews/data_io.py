@@ -121,3 +121,27 @@ def load_sample(folder: str | Path):
             st, g = load_glofas(f, f.name)
             gl[st] = g
     return obs, gl
+
+
+# ---------------------------------------------------------------------------
+# Station-by-station loading
+# ---------------------------------------------------------------------------
+def load_station_observations(src, name: str | None = None, column: str | None = None) -> tuple[pd.Series, list[str]]:
+    """Observed discharge of ONE station: first column = date, then the discharge.
+
+    If the file has several value columns, `column` selects one (default: the first).
+    Returns (series, list_of_value_columns).
+    """
+    df = _read_any(src, name)
+    df = df.rename(columns={df.columns[0]: "Date"})
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df.dropna(subset=["Date"]).set_index("Date").sort_index()
+    df = _to_numeric(df)
+    cols = [c for c in df.columns if df[c].notna().any()]
+    if not cols:
+        raise ValueError("no numeric discharge column found")
+    col = column if column in cols else cols[0]
+    s = df[col].copy()
+    s[s < 0] = np.nan
+    s.name = "Q"
+    return s.dropna(), [str(c) for c in cols]

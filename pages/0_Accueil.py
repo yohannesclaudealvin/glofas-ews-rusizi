@@ -1,41 +1,40 @@
 import streamlit as st
 
-from app_state import sidebar_status
+from app_state import chart, meta_table, page_setup, registry
+from ews.plots import basin_map_plotly
 
-sidebar_status()
-st.title("🌊 Système d'alerte précoce GloFAS – Bassin de la Rusizi")
-st.markdown(
-    """
-Cette application applique la méthodologie de l'article *Performance Assessment and Optimization of GloFAS
-Forecasts on the Rusizi River Basin for Enhanced Anticipatory Flood Action* à **toutes les stations du bassin**.
+page_setup("Système d'alerte précoce GloFAS", icon="🌊")
+st.markdown("""
+<div class="hero"><h2>Bassin de la Rusizi – prévision des crues corrigée à 7 jours</h2>
+<p>Méthodologie de l'article <i>Performance Assessment and Optimization of GloFAS Forecasts on the Rusizi River
+Basin for Enhanced Anticipatory Flood Action</i>, appliquée station par station.</p></div>
+""", unsafe_allow_html=True)
 
-**Étapes**
+c1, c2, c3 = st.columns(3)
+with c1:
+    st.markdown("#### 1. Charger les stations")
+    st.write("Pour chaque station : sa rivière, ses coordonnées, son fichier de débits observés et son fichier "
+             "de prévisions GloFAS historiques.")
+    st.page_link("pages/1_Stations.py", label="Charger les stations", icon="📂")
+with c2:
+    st.markdown("#### 2. Analyser")
+    st.write("Fiche et carte de chaque station, correction en temps réel, performance (KGE, NSE…), qualité des "
+             "prévisions, hydrogrammes, tendances et crues de référence.")
+    st.page_link("pages/2_Fiche_station.py", label="Fiche station et carte", icon="📍")
+with c3:
+    st.markdown("#### 3. Prévoir")
+    st.write("Saisissez le débit observé aujourd'hui : l'application télécharge GloFAS et donne la prévision "
+             "corrigée des 7 prochains jours, avec les niveaux d'alerte.")
+    st.page_link("pages/8_Prevision.py", label="Prévision à 7 jours", icon="🚨")
 
-1. **Données** – chargez le fichier des débits observés (toutes les stations) et les fichiers de prévisions
-   GloFAS historiques (un par station, échéances 1 à 7 jours). Un contrôle qualité est fait automatiquement.
-2. **Analyses** – la correction en temps réel est appliquée, puis l'application calcule :
-   - les critères de performance KGE, NSE, PBIAS et RSR par échéance (brut, corrigé, persistance) ;
-   - la qualité des prévisions d'événements (POD, FAR, LR, ROC, CSI) ;
-   - les hydrogrammes observé / brut / corrigé ;
-   - les tendances (Mann-Kendall modifié), l'analyse fréquentielle (Gumbel, GEV, Normale) et les jours critiques.
-3. **Prévision à 7 jours** – l'application télécharge la dernière prévision GloFAS (avec l'ensemble).
-   Vous saisissez le débit observé aujourd'hui, et elle calcule la prévision corrigée pour les 7 prochains
-   jours avec les niveaux d'alerte.
-
-**Formule de correction (section 2.3.2)**
-""")
+st.markdown("#### Formule de correction (section 2.3.2)")
 st.latex(r"Q_{corr,L}(t) = Q_{GloFAS,L}(t) + \left[\,Q_{obs}(t-L) - Q_{GloFAS,L}(t-L)\,\right]")
-st.markdown(
-    """
-En opérationnel (prévision émise aujourd'hui *t₀*, valable à *t₀ + L*) :
-""")
-st.latex(r"Q_{corr}(t_0+L) = Q_{GloFAS,L}(t_0+L) + \left[\,Q_{obs}(t_0) - Q_{GloFAS,L}(t_0)\,\right]")
-st.markdown(
-    """
-*Q_GloFAS,L(t₀)* est la prévision à L jours émise il y a L jours pour aujourd'hui. Elle est lue dans l'**archive des
-prévisions** que l'application constitue jour après jour. Si elle n'existe pas encore, l'erreur sur la valeur
-GloFAS du jour est utilisée.
 
-Données GloFAS v4 : Copernicus Emergency Management Service, via l'API Open-Meteo Flood.
-""")
-st.page_link("pages/1_Donnees.py", label="Commencer : charger les données", icon="📂")
+if registry():
+    st.markdown("#### Stations chargées")
+    m = meta_table()
+    if m["lat"].notna().any():
+        chart(basin_map_plotly(m))
+    st.dataframe(m, hide_index=True, width="stretch")
+st.caption("GloFAS v4 : Copernicus Emergency Management Service, via l'API Open-Meteo Flood. "
+           "Cours d'eau : © contributeurs OpenStreetMap.")

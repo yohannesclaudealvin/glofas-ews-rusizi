@@ -1,4 +1,4 @@
-"""Shared state and cached computations for all pages."""
+"""Station registry, cached computations and page helpers shared by all pages."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,58 +7,141 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from ews import LEADS
+from ews import theme
 from ews.correction import correct_station, performance_table
-from ews.data_io import load_glofas, load_observations, load_sample, merge_station, qc_report
+from ews.data_io import load_glofas, load_station_observations, merge_station, qc_report
 from ews.statistics import frequency_table
 
 ROOT = Path(__file__).parent
-SAMPLE_DIR = ROOT / "data" / "sample"
+SAMPLE_DIR = ROOT / "data" / "sample" / "stations"
 STATIONS_CSV = ROOT / "config" / "stations.csv"
+LEVELS = ["Vigilance", "Alerte", "Alerte maximale"]
 
 
-# ---------------------------------------------------------------- data loading
-def set_data(obs: pd.DataFrame, glofas: dict, source: str):
-    st.session_state["obs"] = obs
-    st.session_state["glofas"] = glofas
-    st.session_state["source"] = source
+# ======================================================================= page setup
+def page_setup(title: str, subtitle: str | None = None, icon: str = ""):
+    st.markdown(theme.APP_CSS, unsafe_allow_html=True)
+    sidebar()
+    st.title(f"{icon} {title}".strip())
+    if subtitle:
+        st.caption(subtitle)
 
 
-def has_data() -> bool:
-    return st.session_state.get("obs") is not None and bool(st.session_state.get("glofas"))
+def sidebar():
+    with st.sidebar:
+        names = station_names()
+        if names:
+            cur = st.session_state.get("station")
+            idx = names.index(cur) if cur in names else 0
+            st.session_state["station"] = st.selectbox("Station active", names, index=idx, key="_station_select")
+            st.caption(f"{len(names)} station(s) chargée(s)")
+        else:
+            st.info("Aucune station chargée.")
+        st.markdown("---")
+        st.caption("Correction en temps réel de GloFAS :  \n"
+                   "Q_corr,L(t) = Q_GloFAS,L(t) + [Q_obs(t−L) − Q_GloFAS,L(t−L)]")
 
 
-def require_data():
-    if not has_data():
-        st.warning("Aucune donnée chargée. Allez d'abord à la page **1 · Données** pour charger les "
-                   "observations et les fichiers GloFAS.")
-        st.page_link("pages/1_Donnees.py", label="Aller à la page Données", icon="📂")
+def embed_html(html: str, height: int = 560):
+    """Embed a self-generated HTML page (the Folium map). st.iframe on recent Streamlit, components.html before."""
+    if hasattr(st, "iframe"):
+        st.iframe(html, height=height)
+    else:
+        import streamlit.components.v1 as components
+        components.html(html, height=height)
+
+
+def chart(fig, key: str | None = None):
+    st.plotly_chart(fig, width="stretch", config=theme.PLOTLY_CONFIG, key=key)
+
+
+# ======================================================================= station registry
+def defaults() -> pd.DataFrame:
+    return pd.read_csv(STATIONS_CSV)
+
+
+def registry() -> dict:
+    return st.session_state.setdefault("stations", {})
+
+
+def station_names() -> list[str]:
+    return sorted(registry())
+
+
+def add_station(name: str, river: str, lat, lon, cell_lat, cell_lon, obs: pd.Series, glofas: pd.DataFrame | None):
+    name = name.strip().upper()
+    f = lambda v: float(v) if v is not None and v == v and str(v) != "" else None
+    registry()[name] = {"river": river.strip() or name.title(), "lat": f(lat), "lon": f(lon),
+                        "cell_lat": f(cell_lat), "cell_lon": f(cell_lon), "obs": obs, "glofas": glofas}
+    st.session_state["station"] = name
+    st.session_state.pop("op_results", None)
+
+
+def remove_station(name: str):
+    registry().pop(name, None)
+    st.session_state.pop("op_results", None)
+
+
+def meta_table() -> pd.DataFrame:
+    rows = []
+    for n, s in sorted(registry().items()):
+        o = s["obs"]
+        rows.append({"station": n, "river": s["river"], "lat": s["lat"], "lon": s["lon"],
+                     "cell_lat": s["cell_lat"], "cell_lon": s["cell_lon"],
+                     "obs_start": o.index.min().date() if len(o) else None,
+                     "obs_end": o.index.max().date() if len(o) else None, "obs_n": len(o),
+                     "glofas": "oui" if s["glofas"] is not None else "non"})
+    return pd.DataFrame(rows)
+
+
+def obs_wide() -> pd.DataFrame | None:
+    reg = registry()
+    if not reg:
+        return None
+    return pd.concat({n: s["obs"] for n, s in reg.items()}, axis=1).sort_index()
+
+
+def glofas_dict() -> dict:
+    return {n: s["glofas"] for n, s in registry().items() if s["glofas"] is not None}
+
+
+def require_stations(need_glofas: bool = True):
+    if not registry() or (need_glofas and not glofas_dict()):
+        st.warning("Aucune station avec données GloFAS n'est chargée. Commencez par la page **1 · Stations**.")
+        st.page_link("pages/1_Stations.py", label="Charger les stations", icon="📂")
         st.stop()
-    return st.session_state["obs"], st.session_state["glofas"]
+    return obs_wide(), glofas_dict()
 
 
+def current_station(require_glofas: bool = False) -> str:
+    names = [n for n in station_names() if (not require_glofas or registry()[n]["glofas"] is not None)]
+    if not names:
+        require_stations(require_glofas)
+    cur = st.session_state.get("station")
+    return cur if cur in names else names[0]
+
+
+# ======================================================================= sample data
 @st.cache_data(show_spinner=False)
-def read_sample():
-    return load_sample(SAMPLE_DIR)
+def _read_sample():
+    out = {}
+    for f in sorted(SAMPLE_DIR.glob("*_observations.csv")):
+        st_ = f.name.split("_")[0].upper()
+        obs, _ = load_station_observations(f, f.name)
+        g = SAMPLE_DIR / f"{st_}_glofas.xlsx"
+        out[st_] = (obs, load_glofas(g, g.name)[1] if g.exists() else None)
+    return out
 
 
-@st.cache_data(show_spinner=False)
-def read_uploads(obs_bytes: bytes, obs_name: str, gl_files: tuple):
-    obs = load_observations(obs_bytes, obs_name)
-    gl = {}
-    for name, b in gl_files:
-        stn, g = load_glofas(b, name)
-        gl[stn] = g
-    return obs, gl
+def load_sample():
+    d = defaults().set_index("station")
+    for st_, (obs, gl) in _read_sample().items():
+        r = d.loc[st_] if st_ in d.index else pd.Series(dtype=object)
+        add_station(st_, str(r.get("river", st_.title())), r.get("lat"), r.get("lon"), r.get("cell_lat"),
+                    r.get("cell_lon"), obs, gl)
 
 
-def stations_config() -> pd.DataFrame:
-    if "stations_cfg" not in st.session_state:
-        st.session_state["stations_cfg"] = pd.read_csv(STATIONS_CSV)
-    return st.session_state["stations_cfg"]
-
-
-# ---------------------------------------------------------------- analyses
+# ======================================================================= cached analyses
 @st.cache_data(show_spinner=False)
 def qc(obs, glofas):
     return qc_report(obs, glofas)
@@ -86,31 +169,15 @@ def basin_performance(obs, glofas, stations: tuple) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def frequency(obs, station: str, min_fraction: float = 0.0, q_crit: float = 0.9):
-    tab, fits = frequency_table(obs[station], station, q_crit=q_crit, min_fraction=min_fraction)
+    tab, _ = frequency_table(obs[station], station, q_crit=q_crit, min_fraction=min_fraction)
     return tab
 
 
 def thresholds(obs, station: str, q_crit: float = 0.9) -> dict:
-    """Default alert thresholds from the historical record: Q90, Gumbel 2-yr and 5-yr floods,
-    sorted by value and assigned to the three alert levels (lowest = Vigilance)."""
-    if obs is None or station not in obs.columns or obs[station].dropna().empty:
+    """Default alert thresholds: Q90, Gumbel 2-yr and 5-yr floods, sorted (lowest = Vigilance)."""
+    if obs is None or station not in obs.columns or obs[station].dropna().size < 30:
         return {}
-    t = frequency(obs, station, min_fraction=0.25, q_crit=q_crit)   # incomplete years excluded
+    t = frequency(obs, station, min_fraction=0.25, q_crit=q_crit)
     vals = sorted([float(t[f"Q{int(q_crit*100)} (alert)"].iloc[0]), float(t["Q2 Gumbel"].iloc[0]),
                    float(t["Q5 Gumbel"].iloc[0])])
     return dict(zip(LEVELS, vals))
-
-
-LEVELS = ["Vigilance", "Alerte", "Alerte maximale"]
-
-
-def sidebar_status():
-    with st.sidebar:
-        if has_data():
-            obs, gl = st.session_state["obs"], st.session_state["glofas"]
-            st.success(f"Données chargées ({st.session_state.get('source')}) : "
-                       f"{len(gl)} stations GloFAS, {obs.shape[1]} stations observées.")
-        else:
-            st.info("Aucune donnée chargée.")
-        st.caption("Méthode : correction en temps réel de GloFAS — "
-                   "Q_corr,L(t) = Q_GloFAS,L(t) + [Q_obs(t−L) − Q_GloFAS,L(t−L)]")
