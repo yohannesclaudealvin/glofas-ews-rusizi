@@ -5,7 +5,7 @@ from ews.plots import basin_map_plotly
 
 page_setup("Système d'alerte précoce GloFAS", icon="🌊")
 st.markdown("""
-<div class="hero"><h2>Prévision des crues corrigée à 7 jours – bassin de la Rusizi</h2>
+<div class="hero"><h2>Prévision des crues corrigée à 7 jours – Burundi</h2>
 <p>Prévisions GloFAS corrigées avec les débits observés aux stations.</p></div>
 """, unsafe_allow_html=True)
 
@@ -14,7 +14,7 @@ if not registry():
     if c1.button("Essayer avec les données d'exemple", type="primary", disabled=not (SAMPLE_DIR.exists() and any(SAMPLE_DIR.iterdir()))):
         load_sample()
         st.rerun()
-    c2.caption("9 stations du bassin de la Rusizi (2008–2023). Vous pourrez ensuite charger vos propres stations.")
+    c2.caption("9 stations du bassin de la Rusizi (2008–2023). Vous pourrez ensuite ajouter n'importe quelle station du pays.")
 
 c1, c2, c3 = st.columns(3)
 c1.page_link("pages/1_Stations.py", label="1. Charger les stations", icon="📂")

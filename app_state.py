@@ -65,12 +65,36 @@ def station_names() -> list[str]:
     return sorted(registry())
 
 
-def add_station(name: str, river: str, lat, lon, cell_lat, cell_lon, obs: pd.Series, glofas: pd.DataFrame | None):
-    name = name.strip().upper()
-    f = lambda v: float(v) if v is not None and v == v and str(v) != "" else None
-    registry()[name] = {"river": river.strip() or name.title(), "lat": f(lat), "lon": f(lon),
-                        "cell_lat": f(cell_lat), "cell_lon": f(cell_lon), "obs": obs, "glofas": glofas}
-    st.session_state["station"] = name
+def num(v):
+    """Float or None (None, '', NaN and non-numbers all become None)."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if np.isfinite(f) else None
+
+
+def coords(s: dict):
+    """(lat, lon) of the GloFAS cell used for the forecast: the cell if set, else the station."""
+    if num(s.get("cell_lat")) is not None and num(s.get("cell_lon")) is not None:
+        return num(s["cell_lat"]), num(s["cell_lon"])
+    if num(s.get("lat")) is not None and num(s.get("lon")) is not None:
+        return num(s["lat"]), num(s["lon"])
+    return None
+
+
+def add_station(name: str, river: str, lat, lon, cell_lat, cell_lon, obs: pd.Series | None = None,
+                glofas: pd.DataFrame | None = None, select: bool = True):
+    name = str(name).strip().upper()
+    if not name:
+        return
+    if obs is None:
+        obs = pd.Series(dtype=float, index=pd.DatetimeIndex([]), name="Q")
+    river = str(river).strip() if river is not None and str(river) != "nan" else ""
+    registry()[name] = {"river": river or name.title(), "lat": num(lat), "lon": num(lon),
+                        "cell_lat": num(cell_lat), "cell_lon": num(cell_lon), "obs": obs, "glofas": glofas}
+    if select:
+        st.session_state["station"] = name
     st.session_state.pop("op_results", None)
 
 
@@ -92,9 +116,9 @@ def meta_table() -> pd.DataFrame:
 
 
 def obs_wide() -> pd.DataFrame | None:
-    reg = registry()
+    reg = {n: s for n, s in registry().items() if len(s["obs"])}
     if not reg:
-        return None
+        return pd.DataFrame()
     return pd.concat({n: s["obs"] for n, s in reg.items()}, axis=1).sort_index()
 
 
@@ -178,3 +202,11 @@ def thresholds(obs, station: str, q_crit: float = 0.9) -> dict:
     vals = sorted([float(t[f"Q{int(q_crit*100)} (alert)"].iloc[0]), float(t["Q2 Gumbel"].iloc[0]),
                    float(t["Q5 Gumbel"].iloc[0])])
     return dict(zip(LEVELS, vals))
+
+
+def update_station(name: str, **kw):
+    s = registry().get(name)
+    if s is None:
+        return
+    for k, v in kw.items():
+        s[k] = num(v) if k in ("lat", "lon", "cell_lat", "cell_lon") else v

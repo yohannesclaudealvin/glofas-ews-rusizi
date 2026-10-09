@@ -14,7 +14,7 @@ Cette application Streamlit sert de système d'alerte précoce aux crues pour le
 | 6 · Hydrogrammes | Observé / corrigé (/ brut) pour chaque échéance, zoom et curseur temporel |
 | 7 · Tendances et crues | Mann-Kendall modifié et pente de Sen, Gumbel / GEV / Normale (AIC), périodes de retour, jours critiques, détection par GloFAS |
 | Guide et méthodes | Mode d'emploi détaillé et explication de toutes les méthodes (correction, critères, tendances, crues, limites) |
-| 8 · Prévision à 7 jours | Téléchargement de GloFAS (ensemble de 51 membres), saisie du débit observé du jour, prévision corrigée, niveaux d'alerte, exports |
+| 8 · Prévision à 7 jours | Tableau des stations à prévoir (compléter des coordonnées ou ajouter n'importe quelle station du Burundi), téléchargement de GloFAS (ensemble de 51 membres), saisie du débit observé du jour, prévision corrigée, niveaux d'alerte, exports |
 
 Tous les graphiques sont interactifs : survol, zoom, clic sur la légende pour masquer une série, et l'icône 📷 pour télécharger une image PNG haute résolution.
 

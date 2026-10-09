@@ -4,7 +4,7 @@ Run locally:  streamlit run app.py
 """
 import streamlit as st
 
-st.set_page_config(page_title="GloFAS EWS – Bassin de la Rusizi", page_icon="🌊", layout="wide")
+st.set_page_config(page_title="GloFAS EWS – Burundi", page_icon="🌊", layout="wide")
 
 pages = {
     "Démarrer": [
@@ -13,7 +13,7 @@ pages = {
         st.Page("pages/2_Fiche_station.py", title="2 · Fiche station et carte", icon="📍"),
     ],
     "Analyses": [
-        st.Page("pages/3_Bassin.py", title="3 · Synthèse du bassin", icon="🗺️"),
+        st.Page("pages/3_Bassin.py", title="3 · Synthèse des stations", icon="🗺️"),
         st.Page("pages/4_Performance.py", title="4 · Correction et performance", icon="📈"),
         st.Page("pages/5_Qualite_prevision.py", title="5 · Qualité des prévisions", icon="🎯"),
         st.Page("pages/6_Similarite.py", title="6 · Hydrogrammes", icon="〰️"),

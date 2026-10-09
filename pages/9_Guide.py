@@ -48,10 +48,13 @@ tendances et crues de référence. Les graphiques sont interactifs : on zoome à
 masque ou affiche une courbe, et l'appareil photo en haut à droite enregistre l'image en haute résolution. Chaque
 tableau se télécharge en CSV.
 
-**8. Prévision à 7 jours.** C'est la page de tous les jours. On saisit le débit observé le matin à chaque station
-et on lance le calcul. L'application télécharge la dernière prévision GloFAS, la corrige et affiche pour chaque
+**8. Prévision à 7 jours.** C'est la page de tous les jours. Le tableau *Stations à prévoir* reprend les stations
+chargées ; on peut y compléter des coordonnées manquantes ou ajouter une ligne pour n'importe quelle autre station du
+Burundi, même sans historique (il suffit de son nom et de ses coordonnées). On saisit ensuite le débit observé le
+matin à chaque station et on lance le calcul. L'application télécharge la dernière prévision GloFAS, la corrige et affiche pour chaque
 station la prévision des sept prochains jours, la fourchette donnée par l'ensemble des 51 scénarios de GloFAS et
-le niveau d'alerte. Les résultats se téléchargent en CSV.
+le niveau d'alerte. Les résultats se téléchargent en CSV. Pour une station sans historique, les seuils d'alerte et la
+fiabilité ne peuvent pas être calculés : saisissez les seuils à la main dans le tableau prévu.
 
 ### L'archive des prévisions
 

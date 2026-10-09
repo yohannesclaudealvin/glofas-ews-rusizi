@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from app_state import (SAMPLE_DIR, add_station, defaults, glofas_dict, load_sample, meta_table, obs_wide, page_setup,
-                       qc, registry, remove_station)
+                       qc, registry, remove_station, update_station)
 from ews.data_io import load_glofas, load_station_observations
 
 page_setup("Stations", icon="📂")
@@ -75,7 +75,7 @@ if p:
             st.error(f"Erreur : {e}")
 
 if SAMPLE_DIR.exists() and any(SAMPLE_DIR.iterdir()):
-    st.caption("Données d'exemple disponibles : 9 stations IGEBU du bassin (2008–2023).")
+    st.caption("Données d'exemple disponibles : 9 stations IGEBU du bassin de la Rusizi (2008–2023).")
     if st.button("Charger les 9 stations d'exemple"):
         load_sample()
         st.rerun()
@@ -94,8 +94,8 @@ if registry():
     c1, c2, c3 = st.columns([1, 1, 2])
     if c1.button("Enregistrer les modifications"):
         for _, r in edited.iterrows():
-            s = registry()[r["station"]]
-            s.update(river=r["river"], lat=r["lat"], lon=r["lon"], cell_lat=r["cell_lat"], cell_lon=r["cell_lon"])
+            update_station(r["station"], river=r["river"], lat=r["lat"], lon=r["lon"], cell_lat=r["cell_lat"],
+                           cell_lon=r["cell_lon"])
         st.success("Coordonnées mises à jour.")
     c2.download_button("Télécharger stations.csv", edited.drop(columns=["obs_start", "obs_end", "obs_n", "glofas"])
                        .assign(notes="").to_csv(index=False).encode(), "stations.csv", "text/csv",

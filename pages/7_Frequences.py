@@ -10,7 +10,9 @@ if not registry():
     st.warning("Aucune station chargée."); st.page_link("pages/1_Stations.py", label="Charger les stations"); st.stop()
 obs = obs_wide()
 name = current_station()
-o_all = obs[name].dropna()
+o_all = obs[name].dropna() if name in obs.columns else pd.Series(dtype=float)
+if len(o_all) < 30:
+    st.warning(f"La station {name} n'a pas assez de débits observés pour cette analyse."); st.stop()
 
 c1, c2, c3 = st.columns(3)
 y0, y1 = int(o_all.index.year.min()), int(o_all.index.year.max())

@@ -5,15 +5,14 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from app_state import (ROOT, chart, glofas_dict, obs_wide, page_setup, performance, registry, thresholds)
+from app_state import (ROOT, add_station, chart, coords, glofas_dict, num, obs_wide, page_setup, performance, registry,
+                       thresholds, update_station)
 from ews import theme as T
 from ews.correction import ForecastArchive, operational_forecast
 from ews.glofas_api import fetch_forecast
 from ews.plots import forecast_chart
 
 page_setup("Prévision corrigée à 7 jours", icon="🚨")
-if not registry():
-    st.warning("Aucune station chargée."); st.page_link("pages/1_Stations.py", label="Charger les stations"); st.stop()
 
 ARCHIVE_FILE = ROOT / "archive" / "forecast_archive.csv"
 FR = {"lead": "Échéance (j)", "valid_date": "Date", "glofas_raw": "GloFAS brut", "error_added": "Correction",
@@ -52,15 +51,47 @@ def reliability(station: str, lead: int) -> str:
     return "bonne" if v >= 0.5 else ("moyenne" if v >= 0 else "faible")
 
 
-reg = registry()
-ready = [n for n, s in sorted(reg.items()) if (s["cell_lat"] or s["lat"]) is not None]
-missing = [n for n in sorted(reg) if n not in ready]
-
 tz = ZoneInfo("Africa/Bujumbura")
-c1, c2 = st.columns([1, 2])
-today = c1.date_input("Date d'émission (aujourd'hui)", dt.datetime.now(tz).date())
+today = st.date_input("Date d'émission (aujourd'hui)", dt.datetime.now(tz).date())
+
+# ------------------------------------------------------------------ stations to forecast (any station in Burundi)
+st.subheader("Stations à prévoir")
+st.caption("Complétez les coordonnées manquantes ou ajoutez une ligne pour n'importe quelle station du Burundi "
+           "(latitude et longitude de la station ou de sa maille GloFAS, en degrés décimaux).")
+reg = registry()
+sig = tuple(sorted(reg))
+if st.session_state.get("fc_sig") != sig:
+    st.session_state["fc_sig"] = sig
+    st.session_state.pop("fc_editor", None)
+    st.session_state["fc_base"] = pd.DataFrame(
+        [{"Station": n, "Rivière": v["river"], "Latitude": (coords(v) or (None, None))[0],
+          "Longitude": (coords(v) or (None, None))[1]} for n, v in sorted(reg.items())],
+        columns=["Station", "Rivière", "Latitude", "Longitude"]).astype({"Latitude": float, "Longitude": float})
+ed = st.data_editor(st.session_state["fc_base"], key="fc_editor", num_rows="dynamic", hide_index=True, width="stretch",
+                    column_config={"Station": st.column_config.TextColumn(required=True),
+                                   "Latitude": st.column_config.NumberColumn(format="%.4f", min_value=-5.0, max_value=-2.0),
+                                   "Longitude": st.column_config.NumberColumn(format="%.4f", min_value=28.5, max_value=31.0)})
+changed = False
+for _, r in ed.iterrows():
+    n = str(r["Station"] or "").strip().upper()
+    if not n or n == "NONE":
+        continue
+    lat, lon = num(r["Latitude"]), num(r["Longitude"])
+    if n not in reg:
+        add_station(n, r["Rivière"] or "", lat, lon, lat, lon, select=False); changed = True
+    elif coords(reg[n]) != ((lat, lon) if lat is not None and lon is not None else None) and lat is not None and lon is not None:
+        if num(reg[n]["lat"]) is None:
+            update_station(n, lat=lat, lon=lon)
+        update_station(n, cell_lat=lat, cell_lon=lon)
+if changed:
+    st.rerun()
+reg = registry()
+ready = [n for n, v in sorted(reg.items()) if coords(v) is not None]
+missing = [n for n in sorted(reg) if n not in ready]
 if missing:
-    c2.info("Sans coordonnées (pas de prévision possible) : " + ", ".join(missing))
+    st.info("Sans coordonnées, donc pas de prévision : " + ", ".join(missing))
+if not ready:
+    st.stop()
 
 st.subheader("Débit observé aujourd'hui (m³/s)")
 cols = st.columns(min(4, max(1, len(ready))))
@@ -104,7 +135,7 @@ if st.button("Télécharger GloFAS et calculer la prévision corrigée", type="p
     with st.spinner("Téléchargement des prévisions GloFAS…"):
         for n in ready:
             s = reg[n]
-            lat, lon = (s["cell_lat"], s["cell_lon"]) if s["cell_lat"] is not None else (s["lat"], s["lon"])
+            lat, lon = coords(s)
             try:
                 fc = manual[n] if n in manual else get_fc(float(lat), float(lon), str(today))
             except Exception as e:

@@ -5,7 +5,7 @@ from app_state import basin_performance, chart, meta_table, page_setup, require_
 from ews import theme as T
 from ews.plots import heatmap
 
-page_setup("Synthèse du bassin", icon="🗺️")
+page_setup("Synthèse des stations", icon="🗺️")
 obs, gl = require_stations()
 all_st = usable_stations(obs, gl)
 stations = st.multiselect("Stations", all_st, default=all_st)
