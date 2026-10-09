@@ -1,9 +1,12 @@
+import folium
 import pandas as pd
 import streamlit as st
+from streamlit_folium import st_folium
 
-from app_state import (SAMPLE_DIR, add_station, defaults, glofas_dict, load_sample, meta_table, obs_wide, page_setup,
-                       qc, registry, remove_station, update_station)
+from app_state import (SAMPLE_DIR, add_station, defaults, glofas_dict, load_sample, meta_table, num, obs_wide,
+                       page_setup, qc, registry, remove_station, update_station)
 from ews.data_io import load_glofas, load_station_observations
+from ews.geo import propose_point, search_river
 
 page_setup("Stations", icon="📂")
 
@@ -20,37 +23,109 @@ with st.expander("Format des fichiers"):
 
 # ------------------------------------------------------------------ add a station
 st.subheader("➕ Ajouter ou mettre à jour une station")
+st.caption("N'importe quelle station du Burundi : choisissez-la dans la liste ou créez-en une nouvelle. "
+           "Le fichier de débits observés est facultatif : sans lui, la station sert seulement à la prévision.")
 d = defaults()
-c1, c2 = st.columns([1, 1])
-known = c1.selectbox("Station connue (pré-remplit rivière et coordonnées)", ["— nouvelle station —"] + list(d["station"]))
+NEWST = "— nouvelle station —"
+known = st.selectbox("Station connue (pré-remplit rivière et coordonnées)", [NEWST] + list(d["station"]),
+                     key="known_station")
 row = d[d["station"] == known].iloc[0] if known in set(d["station"]) else None
 val = lambda k, default=None: (row[k] if row is not None and pd.notna(row[k]) else default)
+if st.session_state.get("_known_prev") != known:          # new choice: refill the inputs
+    st.session_state["_known_prev"] = known
+    st.session_state["f_name"] = known if row is not None else ""
+    st.session_state["f_river"] = val("river", "")
+    for k, c in (("f_lat", "lat"), ("f_lon", "lon"), ("f_clat", "cell_lat"), ("f_clon", "cell_lon")):
+        st.session_state[k] = num(val(c))
+    st.session_state.pop("river_search", None)
+if row is not None and isinstance(val("notes"), str) and val("notes"):
+    st.caption(f"ℹ️ {val('notes')}")
+
+a1, a2 = st.columns(2)
+a1.text_input("Nom de la station", key="f_name", placeholder="ex. MUGERE")
+a2.text_input("Rivière", key="f_river", placeholder="ex. Mugere")
+
+# ---- locate the river in OpenStreetMap and pick the position on the map
+with st.expander("🔎 Trouver la rivière et placer la station sur la carte", expanded=row is None):
+    c1, c2 = st.columns([3, 1])
+    c1.caption("Recherche du cours d'eau par son nom dans OpenStreetMap (Burundi). L'application propose un point "
+               "à 3 km en amont de l'exutoire ; cliquez sur la carte pour placer la station exactement.")
+    if c2.button("Chercher la rivière", width="stretch", disabled=not st.session_state.get("f_river")):
+        try:
+            with st.spinner("Recherche dans OpenStreetMap…"):
+                ways = search_river(st.session_state["f_river"])
+            st.session_state["river_search"] = ways
+            if ways:
+                pp = propose_point(ways)
+                if num(st.session_state.get("f_lat")) is None:
+                    st.session_state["f_lat"], st.session_state["f_lon"] = pp[0], pp[1]
+                st.session_state["river_outlet"] = pp[2]
+            else:
+                st.warning("Aucun cours d'eau de ce nom au Burundi dans OpenStreetMap. Essayez une autre orthographe, "
+                           "ou cliquez directement sur la carte.")
+        except Exception as e:
+            st.error(str(e))
+    ways = st.session_state.get("river_search") or []
+    clat, clon = num(st.session_state.get("f_lat")), num(st.session_state.get("f_lon"))
+    center = [clat, clon] if clat is not None else ([ways[0]["coords"][0][0], ways[0]["coords"][0][1]] if ways
+                                                    else [-3.38, 29.90])
+    fm = folium.Map(location=center, zoom_start=11 if (clat is not None or ways) else 8, tiles=None)
+    folium.TileLayer("OpenStreetMap", name="OpenStreetMap").add_to(fm)
+    folium.TileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+                     attr="Esri", name="Satellite (Esri)", show=False).add_to(fm)
+    for w in ways:
+        folium.PolyLine(w["coords"], color="#1c5cab", weight=4, tooltip=w["name"]).add_to(fm)
+    if ways:
+        fm.fit_bounds([[min(c[0] for w in ways for c in w["coords"]), min(c[1] for w in ways for c in w["coords"])],
+                       [max(c[0] for w in ways for c in w["coords"]), max(c[1] for w in ways for c in w["coords"])]])
+    if st.session_state.get("river_outlet") and ways:
+        folium.CircleMarker(st.session_state["river_outlet"], radius=5, color="#eb6834", fill=True,
+                            tooltip="Exutoire").add_to(fm)
+    if clat is not None and clon is not None:
+        folium.Marker([clat, clon], tooltip=f"Station : {clat:.4f}, {clon:.4f}",
+                      icon=folium.Icon(color="darkblue", icon="tint", prefix="fa")).add_to(fm)
+    folium.LayerControl().add_to(fm)
+    out = st_folium(fm, height=420, width=None, key="pick_map", returned_objects=["last_clicked"])
+    click = (out or {}).get("last_clicked")
+    if click and (round(click["lat"], 4), round(click["lng"], 4)) != st.session_state.get("_last_click"):
+        st.session_state["_last_click"] = (round(click["lat"], 4), round(click["lng"], 4))
+        st.session_state["f_lat"], st.session_state["f_lon"] = round(click["lat"], 4), round(click["lng"], 4)
+        st.rerun()
 
 with st.form("add_station", clear_on_submit=False):
-    a1, a2 = st.columns(2)
-    name = a1.text_input("Nom de la station", value=known if row is not None else "")
-    river = a2.text_input("Rivière", value=val("river", ""))
     b1, b2, b3, b4 = st.columns(4)
-    lat = b1.number_input("Latitude station (°)", value=val("lat"), format="%.5f", step=0.001)
-    lon = b2.number_input("Longitude station (°)", value=val("lon"), format="%.5f", step=0.001)
-    clat = b3.number_input("Latitude maille GloFAS", value=val("cell_lat"), format="%.3f", step=0.05,
-                           help="Centre de la maille GloFAS 0,05° utilisée pour la prévision. Laissez vide pour "
-                                "utiliser les coordonnées de la station.")
-    clon = b4.number_input("Longitude maille GloFAS", value=val("cell_lon"), format="%.3f", step=0.05)
+    b1.number_input("Latitude station (°)", key="f_lat", format="%.5f", step=0.001)
+    b2.number_input("Longitude station (°)", key="f_lon", format="%.5f", step=0.001)
+    b3.number_input("Latitude maille GloFAS", key="f_clat", format="%.3f", step=0.05,
+                    help="Centre de la maille GloFAS 0,05° utilisée pour la prévision. Laissez vide pour "
+                         "utiliser les coordonnées de la station.")
+    b4.number_input("Longitude maille GloFAS", key="f_clon", format="%.3f", step=0.05)
     f1, f2 = st.columns(2)
-    obs_f = f1.file_uploader("Débits observés de la station", type=["xlsx", "xls", "csv"])
+    obs_f = f1.file_uploader("Débits observés de la station (facultatif)", type=["xlsx", "xls", "csv"])
     gl_f = f2.file_uploader("Prévisions GloFAS historiques de la station (facultatif)", type=["xlsx", "xls", "csv"])
     submitted = st.form_submit_button("Enregistrer la station", type="primary")
 
 if submitted:
-    if not name or obs_f is None:
-        st.error("Indiquez au moins le nom de la station et son fichier de débits observés.")
+    name, river = st.session_state["f_name"].strip(), st.session_state["f_river"]
+    lat, lon = num(st.session_state["f_lat"]), num(st.session_state["f_lon"])
+    clat_, clon_ = num(st.session_state["f_clat"]), num(st.session_state["f_clon"])
+    if not name:
+        st.error("Indiquez au moins le nom de la station.")
+    elif obs_f is None:
+        if lat is None or lon is None:
+            st.error("Sans fichier de débits, il faut au moins les coordonnées de la station (pour la prévision).")
+        else:
+            gl = load_glofas(gl_f.getvalue(), gl_f.name)[1] if gl_f is not None else None
+            add_station(name, river, lat, lon, clat_ if clat_ is not None else lat,
+                        clon_ if clon_ is not None else lon, None, gl)
+            st.success(f"Station {name.upper()} ajoutée sans observations : elle est disponible dans la page "
+                       "8 · Prévision. Ajoutez ses débits observés plus tard pour les analyses.")
     else:
         try:
             obs, cols = load_station_observations(obs_f.getvalue(), obs_f.name)
             st.session_state["_pending"] = dict(name=name, river=river, lat=lat, lon=lon,
-                                                clat=clat if clat is not None else lat,
-                                                clon=clon if clon is not None else lon,
+                                                clat=clat_ if clat_ is not None else lat,
+                                                clon=clon_ if clon_ is not None else lon,
                                                 obs_bytes=obs_f.getvalue(), obs_name=obs_f.name, cols=cols,
                                                 gl=(gl_f.name, gl_f.getvalue()) if gl_f is not None else None)
         except Exception as e:

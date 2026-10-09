@@ -22,7 +22,7 @@ for o in sorted(SD.glob("*_observations.csv")):
               "cell_lon": f(r["cell_lon"]), "obs": load_station_observations(o, o.name)[0],
               "glofas": load_glofas(g, g.name)[1] if g.exists() else None}
 
-PAGES = ["pages/0_Accueil.py", "pages/1_Stations.py", "pages/2_Fiche_station.py", "pages/3_Bassin.py",
+PAGES = ["pages/0_Accueil.py", "pages/1_Stations.py", "pages/2_Fiche_station.py", "pages/3_Bassin.py", "pages/3b_Carte_animee.py",
          "pages/4_Performance.py", "pages/5_Qualite_prevision.py", "pages/6_Similarite.py", "pages/7_Frequences.py",
          "pages/8_Prevision.py", "pages/9_Guide.py"]
 

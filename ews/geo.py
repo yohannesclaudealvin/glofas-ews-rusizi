@@ -48,6 +48,57 @@ def fetch_rivers(lat: float, lon: float, radius_m: int = 30000, timeout: int = 4
     raise RuntimeError(f"OpenStreetMap (Overpass) indisponible : {last}")
 
 
+BURUNDI = (-4.50, 28.95, -2.28, 30.90)      # south, west, north, east
+
+
+def search_river(name: str, bbox=BURUNDI, timeout: int = 60) -> list[dict]:
+    """Ways of the river called `name` (any spelling case) inside `bbox` (Burundi by default)."""
+    s, w, n, e = bbox
+    safe = "".join(ch for ch in name.strip() if ch.isalnum() or ch in " -'")
+    q = (f'[out:json][timeout:{timeout}];way["waterway"~"river|stream"]["name"~"^{safe}$",i]'
+         f'({s},{w},{n},{e});out geom;')
+    last = None
+    for url in OVERPASS:
+        try:
+            r = requests.post(url, data={"data": q}, headers=HEADERS, timeout=timeout + 10)
+            r.raise_for_status()
+            return [{"name": _html.escape(el.get("tags", {}).get("name", "")),
+                     "waterway": el.get("tags", {}).get("waterway", ""),
+                     "coords": [[p["lat"], p["lon"]] for p in el["geometry"]]}
+                    for el in r.json().get("elements", []) if el.get("geometry")]
+        except Exception as ex:
+            last = ex
+    raise RuntimeError(f"OpenStreetMap (Overpass) indisponible : {last}")
+
+
+def _km(a, b):
+    import math
+    k = math.pi / 180
+    return 6371 * math.hypot((b[1] - a[1]) * k * math.cos((a[0] + b[0]) / 2 * k), (b[0] - a[0]) * k)
+
+
+def propose_point(ways: list[dict], upstream_km: float = 3.0):
+    """A plausible gauge position: `upstream_km` above the river outlet.
+
+    OpenStreetMap draws waterways in the direction of flow, so the outlet is the last node of the
+    way whose end is not the start of another way of the same river. Returns (lat, lon, outlet).
+    """
+    if not ways:
+        return None
+    starts = {tuple(w["coords"][0]) for w in ways}
+    ends = [w for w in ways if tuple(w["coords"][-1]) not in starts] or ways
+    # several candidate outlets (tributaries with the same name): keep the longest chain's one
+    w = max(ends, key=lambda w: len(w["coords"]))
+    pts = w["coords"][::-1]
+    acc, p = 0.0, pts[0]
+    for a, b in zip(pts[:-1], pts[1:]):
+        acc += _km(a, b)
+        p = b
+        if acc >= upstream_km:
+            break
+    return round(p[0], 4), round(p[1], 4), (round(pts[0][0], 4), round(pts[0][1], 4))
+
+
 def match_river(ways: list[dict], river_name: str, station: str | None = None) -> tuple[str | None, list[dict]]:
     """Ways of the station's river: exact (accent-insensitive) names first, then partial, then fuzzy."""
     targets = {_norm(t) for t in [river_name] + ALIASES.get((station or "").upper(), []) if t}

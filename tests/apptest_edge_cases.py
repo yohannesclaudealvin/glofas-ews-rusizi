@@ -24,7 +24,7 @@ reg["GITEGA"] = {"river": "Ruvubu", "lat": -3.43, "lon": 29.92, "cell_lat": None
 ok = True
 for stn in ("RUSIZI", "NTAHANGWA", "GITEGA"):
     for page in ("pages/0_Accueil.py", "pages/1_Stations.py", "pages/2_Fiche_station.py", "pages/3_Bassin.py",
-                 "pages/7_Frequences.py", "pages/8_Prevision.py"):
+                 "pages/7_Frequences.py", "pages/8_Prevision.py", "pages/3b_Carte_animee.py"):
         at = AppTest.from_file(str(ROOT / "app.py"), default_timeout=240)
         at.session_state["stations"] = {k: dict(v) for k, v in reg.items()}
         at.session_state["station"] = stn

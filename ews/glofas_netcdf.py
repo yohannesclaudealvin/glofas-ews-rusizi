@@ -20,6 +20,30 @@ import pandas as pd
 EWDS_URL = "https://ewds.climate.copernicus.eu/api"
 DATASET = "cems-glofas-forecast"
 BURUNDI_BBOX = {"lat_max": -2.25, "lat_min": -4.50, "lon_min": 28.95, "lon_max": 30.90}
+# download zones ("watershed" button of the original interface)
+ZONES = {
+    "Burundi entier": BURUNDI_BBOX,
+    "Bassin de la Rusizi (Burundi)": {"lat_max": -2.55, "lat_min": -3.60, "lon_min": 28.95, "lon_max": 29.80},
+    "Affluents du lac Tanganyika (sud)": {"lat_max": -3.30, "lat_min": -4.50, "lon_min": 29.20, "lon_max": 29.95},
+}
+
+
+def configured_key(secrets=None) -> str | None:
+    """Copernicus key configured once 'in the system': Streamlit secrets, environment or ~/.cdsapirc."""
+    try:
+        if secrets is not None and secrets.get("CDS_API_KEY"):
+            return str(secrets["CDS_API_KEY"])
+    except Exception:
+        pass
+    for v in ("CDSAPI_KEY", "CDS_API_KEY"):
+        if os.environ.get(v):
+            return os.environ[v]
+    rc = os.path.expanduser("~/.cdsapirc")
+    if os.path.exists(rc):
+        for line in open(rc, encoding="utf-8"):
+            if line.strip().startswith("key:"):
+                return line.split(":", 1)[1].strip()
+    return None
 
 
 def download_forecast(key: str, day, bbox: dict, days: int = 7, ensemble: bool = True,
@@ -40,15 +64,35 @@ def download_forecast(key: str, day, bbox: dict, days: int = 7, ensemble: bool =
         "area": [bbox["lat_max"], bbox["lon_min"], bbox["lat_min"], bbox["lon_max"]],   # N, W, S, E
     }
     client = cdsapi.Client(url=url, key=key.strip(), quiet=True, progress=False)
-    with tempfile.TemporaryDirectory() as d:
-        target = os.path.join(d, "glofas.nc")
-        client.retrieve(DATASET, req, target)
-        with open(target, "rb") as f:
-            return f.read()
+    last = None
+    for fmt in ("netcdf", "netcdf4"):           # the format name has changed between catalogue versions
+        req["data_format"] = fmt
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                target = os.path.join(d, "glofas.nc")
+                client.retrieve(DATASET, req, target)
+                with open(target, "rb") as f:
+                    return unzip_nc(f.read())
+        except Exception as e:
+            last = e
+            if "format" not in str(e).lower():
+                break
+    raise last
+
+
+def unzip_nc(data: bytes) -> bytes:
+    """The NetCDF file itself, also when it comes zipped (download_format 'zip')."""
+    if data[:2] == b"PK":
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            names = [n for n in z.namelist() if n.lower().endswith((".nc", ".nc4", ".netcdf"))] or z.namelist()
+            return z.read(names[0])
+    return data
 
 
 def _open(nc: bytes):
     import xarray as xr
+    nc = unzip_nc(nc)
     for engine in ("h5netcdf", "netcdf4", "scipy"):
         try:
             return xr.open_dataset(io.BytesIO(nc), engine=engine).load()

@@ -69,13 +69,25 @@ L'application s'ouvre dans le navigateur (http://localhost:8501). En local, l'ar
 >
 > **Archive en ligne.** Sur Streamlit Cloud, les fichiers écrits par l'application ne sont pas conservés. Téléchargez l'archive (`forecast_archive.csv`) après chaque utilisation, et rechargez-la la fois suivante dans la page 8.
 
+## N'importe quelle station du Burundi
+
+La page 1 accepte toute station : la liste contient déjà les 9 stations du bassin de la Rusizi et les rivières **Mugere, Jiji, Murembwe, Kanyosha, Dama et Nyengwe** (positions approximatives, à 3 km en amont de l'exutoire d'après OpenStreetMap, à remplacer par les coordonnées réelles). Pour une autre rivière, tapez son nom et cliquez sur *Chercher la rivière* : le cours d'eau s'affiche sur la carte, un point est proposé, et un clic sur la carte place la station. Le fichier de débits observés est facultatif : sans lui, la station sert seulement à la prévision (seuils à saisir à la main).
+
+## Carte animée des débits
+
+La page *Carte animée des débits* montre le comportement des cours d'eau dans le temps : la rivière prend la couleur du niveau d'alerte et s'épaissit avec le débit, avec un bouton Lecture, un curseur de dates et l'hydrogramme sous la carte. Données : débits observés, GloFAS brut ou corrigé (1 j), ou la dernière prévision. Export en HTML interactif et en GIF animé.
+
 ## Téléchargement automatique de GloFAS
 
 La page 8 récupère la prévision GloFAS de trois façons :
 
 - **Automatique** (par défaut, sans clé) : API Open-Meteo Flood, contrôle et 50 membres, jusqu'à 30 jours ;
 - **Copernicus (clé API)** : fichier NetCDF officiel du jeu `cems-glofas-forecast` sur le Early Warning Data Store (https://ewds.climate.copernicus.eu). Il faut un compte gratuit, accepter une fois la licence du jeu de données, puis coller sa clé (*API Token*) dans la page. Zone par défaut : le Burundi (lat. −4,50 à −2,25, long. 28,95 à 30,90) ;
-- **Fichier NetCDF** : un fichier GloFAS déjà téléchargé (variable `dis24`).
+- **Fichier NetCDF** : un fichier GloFAS déjà téléchargé (variable `dis24`, `.nc` ou `.zip`).
+
+La clé Copernicus peut être configurée une fois pour toutes : sur Streamlit Cloud, *Settings → Secrets* avec `CDS_API_KEY = "votre-clé"` ; en local, dans le fichier `~/.cdsapirc` (`url: https://ewds.climate.copernicus.eu/api` et `key: votre-clé`).
+
+La correction utilise la prévision GloFAS téléchargée le jour même (valeur pour aujourd'hui et pour les jours suivants) et le débit observé du jour. Le fichier GloFAS historique ne sert qu'à évaluer la méthode sur le passé.
 
 L'application prend la maille la plus proche des coordonnées saisies et l'écrit dans la zone *Messages*.
 
@@ -113,7 +125,8 @@ ews/                   la méthodologie, indépendante de l'interface
   statistics.py        Mann-Kendall modifié, Sen, Gumbel/GEV/Normale, jours critiques
   glofas_api.py        API Open-Meteo Flood (GloFAS v4), recherche de maille
   glofas_netcdf.py     téléchargement Copernicus EWDS (cdsapi) et lecture des fichiers NetCDF
-  geo.py               carte Folium, tracé des rivières (OpenStreetMap), export GeoJSON
+  geo.py               carte Folium, tracé et recherche des rivières (OpenStreetMap), export GeoJSON
+  animation.py         carte animée des débits (Plotly) et GIF (matplotlib)
   plots.py             graphiques Plotly interactifs
   theme.py             couleurs et style de l'application et des graphiques
 config/stations.csv    mailles GloFAS des stations

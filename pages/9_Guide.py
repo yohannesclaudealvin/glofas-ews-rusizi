@@ -26,21 +26,33 @@ toutes les pages sans avoir vos propres données.
 
 ### Travailler avec vos propres stations
 
-**1. Stations.** On ajoute les stations une par une. Pour chacune, il faut :
+**1. Stations.** On ajoute les stations une par une, et ce peut être n'importe quelle station du Burundi :
+Mugere, Jiji, Murembwe, Kanyosha, Dama, Nyengwe sont déjà dans la liste, et on peut en créer d'autres. Pour chacune :
 
 - son nom et le nom de la rivière ;
-- les coordonnées de la station (en degrés décimaux, par exemple −3.3250 et 29.2250) ;
+- sa position. Le plus simple est de taper le nom de la rivière et de cliquer sur *Chercher la rivière* :
+  l'application retrouve le cours d'eau dans OpenStreetMap, l'affiche sur une carte et propose un point à 3 km en
+  amont de l'exutoire. On clique ensuite sur la carte, à l'endroit exact de la station, et les coordonnées se
+  remplissent. On peut aussi les saisir à la main (degrés décimaux, par exemple −3.3250 et 29.2250) ;
 - les coordonnées de la maille GloFAS si vous les connaissez (sinon celles de la station sont reprises) ;
-- un fichier de débits observés : la date dans la première colonne, le débit en m³/s dans la deuxième ;
-- un fichier GloFAS historique : la date, puis les prévisions à 1, 2, … 7 jours (huit colonnes en tout).
+- un fichier de débits observés (facultatif) : la date dans la première colonne, le débit en m³/s dans la deuxième ;
+- un fichier GloFAS historique (facultatif) : la date, puis les prévisions à 1, 2, … 7 jours (huit colonnes).
 
-Les deux fichiers peuvent être en Excel ou en CSV. Des modèles sont proposés sur la page. Le fichier GloFAS est
-facultatif, mais sans lui les analyses de performance ne sont pas possibles pour la station.
+Une station sans fichier sert seulement à la prévision : il faut alors saisir soi-même ses seuils d'alerte. Avec les
+débits observés, l'application calcule les seuils et les tendances ; avec le fichier GloFAS historique en plus, elle
+évalue aussi la performance de la correction. Les positions proposées pour les nouvelles rivières sont approximatives :
+remplacez-les par les coordonnées réelles des stations dès que vous les avez.
 
 **2. Fiche station et carte.** On y trouve les coordonnées de la station, ses chiffres principaux et une carte de la
 rivière. Le tracé vient d'OpenStreetMap ; le carré orange est la maille GloFAS utilisée pour la prévision. La carte
 se télécharge en HTML (elle s'ouvre dans n'importe quel navigateur, sans logiciel particulier) et en GeoJSON pour
 QGIS ou ArcGIS. C'est aussi ici que l'on cherche la bonne maille GloFAS d'une station (voir l'onglet *Limites*).
+
+**Carte animée des débits.** La rivière y change de couleur selon le niveau d'alerte (vert, jaune, orange, rouge)
+et s'épaissit quand le débit monte. Le bouton *Lecture* fait défiler les dates, le curseur permet d'aller à une
+date précise, et l'hydrogramme en dessous montre où l'on se trouve dans la saison. On peut animer les débits
+observés, GloFAS brut ou corrigé, ou la dernière prévision de la page 8, pour une station ou plusieurs à la fois.
+L'animation se télécharge en page HTML interactive ou en GIF (pratique pour un rapport ou un message).
 
 **3 à 7. Analyses.** La station étudiée se choisit dans la barre de gauche. Chaque page reprend une étape de la
 méthode : synthèse du bassin, correction et performance, qualité des prévisions d'événements, hydrogrammes,
@@ -53,11 +65,13 @@ tableau se télécharge en CSV.
 *Prévision d'une station* reprend la disposition de l'interface de prévision des inondations : à gauche les
 réglages, à droite le graphique et les messages.
 
-- **Télécharger.** Trois façons d'obtenir la prévision GloFAS. *Automatique* : rien à faire, la dernière
-  prévision (contrôle et 50 membres) est téléchargée au moment d'exécuter, sans clé. *Copernicus (clé API)* : on
-  colle sa clé, on garde ou on change les limites de la zone (le Burundi par défaut), on choisit la date et on
-  clique OK ; l'application récupère le fichier NetCDF officiel de GloFAS pour 30 jours. Cela prend d'une à
-  quelques minutes, selon la file d'attente de Copernicus. *Fichier NetCDF* : on charge un fichier déjà téléchargé.
+- **Télécharger.** C'est ici que l'application va chercher la prévision GloFAS, sans laquelle aucune correction
+  n'est possible. Trois façons de l'obtenir. *Automatique* : le bouton *Télécharger la prévision GloFAS* récupère
+  la dernière prévision (contrôle et 50 membres) pour les coordonnées de la station, sans clé ; la courbe brute
+  s'affiche aussitôt à droite. *Copernicus (clé API)* : comme dans l'interface d'origine, on donne sa clé, on choisit
+  la zone (Burundi entier, bassin de la Rusizi, sud du lac, autour de la station ou limites personnalisées) et la
+  date, puis OK ; l'application récupère le fichier NetCDF officiel de GloFAS sur 30 jours. Cela prend d'une à
+  quelques minutes. *Fichier NetCDF* : on charge un fichier déjà téléchargé (.nc, ou .zip qui le contient).
 - **Prévision.** On choisit la station (ou « nouvelle station », avec son nom et sa rivière), on vérifie sa
   longitude et sa latitude, puis on règle les seuils. Au-dessus du seuil rouge le niveau est rouge, entre l'orange
   et le rouge il est orange, entre le jaune et l'orange il est jaune, et sous le seuil jaune tout est vert. On
@@ -68,6 +82,9 @@ réglages, à droite le graphique et les messages.
 - **Le graphique** montre l'observation du jour, la prévision brute, la prévision corrigée et la fourchette des
   51 scénarios, sur fond de couleurs d'alerte. On peut afficher la corrigée, la brute ou les deux, et tout
   télécharger : le graphique (HTML), les données (CSV) et l'archive.
+- **Détail du calcul** (sous le graphique) montre les trois nombres qui font la correction : le débit observé
+  aujourd'hui, le débit que GloFAS donnait pour aujourd'hui, et leur différence, ajoutée ensuite à chaque jour de
+  la prévision. **Carte animée de la prévision** fait défiler les jours à venir sur la carte de la rivière.
 - **Messages** garde la trace de ce qui s'est passé : fichier chargé, maille GloFAS utilisée, correction appliquée,
   et les erreurs en rouge (clé refusée, coordonnées manquantes…).
 
@@ -134,6 +151,16 @@ deux a servi.
 
 La même correction est appliquée aux statistiques de l'ensemble (minimum, quartiles, médiane, maximum). La bande
 bleue du graphique montre donc l'incertitude des prévisions météorologiques, une fois l'erreur de niveau retirée.
+
+
+### D'où viennent les données GloFAS de la correction ?
+
+La formule a besoin de deux valeurs GloFAS : la prévision pour les jours à venir, Q_GloFAS,L(t₀+L), et la valeur
+que GloFAS donnait pour aujourd'hui, Q_GloFAS,L(t₀). Les deux viennent de la prévision GloFAS téléchargée le jour même
+(page 8), et non du fichier GloFAS historique. Ce fichier historique ne sert qu'à évaluer la méthode sur le passé
+(pages 4 à 6) et à dire si la prévision corrigée est fiable à chaque échéance. Une station sans fichier historique
+peut donc être prévue : il suffit de ses coordonnées et de son débit du jour. Sans prévision GloFAS téléchargée, en
+revanche, aucune correction n'est possible, et l'application l'indique dans la zone *Messages*.
 
 ### Pourquoi comparer à la persistance
 

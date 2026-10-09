@@ -14,6 +14,7 @@ pages = {
     ],
     "Analyses": [
         st.Page("pages/3_Bassin.py", title="3 · Synthèse des stations", icon="🗺️"),
+        st.Page("pages/3b_Carte_animee.py", title="Carte animée des débits", icon="🎞️"),
         st.Page("pages/4_Performance.py", title="4 · Correction et performance", icon="📈"),
         st.Page("pages/5_Qualite_prevision.py", title="5 · Qualité des prévisions", icon="🎯"),
         st.Page("pages/6_Similarite.py", title="6 · Hydrogrammes", icon="〰️"),

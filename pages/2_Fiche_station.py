@@ -68,6 +68,7 @@ else:
                            geojson(name, s["river"], s["lat"], s["lon"], s["cell_lat"], s["cell_lon"], river_ways),
                            f"{name}.geojson", "application/geo+json", width="stretch")
         st.caption("HTML : navigateur. GeoJSON : QGIS / ArcGIS.")
+        st.page_link("pages/3b_Carte_animee.py", label="Voir les débits animés sur la carte", icon="🎞️")
 
 # ------------------------------------------------------------------ observed series
 if len(obs):
