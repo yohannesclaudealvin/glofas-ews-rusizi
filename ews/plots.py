@@ -195,6 +195,6 @@ def forecast_panel(station: str, res: pd.DataFrame, q_obs: float, today, thresho
                              marker=dict(color=T.INK, size=13, symbol="diamond")))
     fig.update_layout(title=f"{station} – prévision du {t0:%d/%m/%Y} sur {len(res)} jour(s)", height=440,
                       yaxis=dict(title="Débit (m³/s)", range=[0, ymax]), hovermode="x unified",
-                      legend=dict(orientation="h", yanchor="top", y=-0.14, xanchor="left", x=0),
-                      margin=dict(t=60, b=40))
+                      legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="left", x=0),
+                      margin=dict(t=60, b=80))
     return fig
