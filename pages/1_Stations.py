@@ -5,7 +5,7 @@ from streamlit_folium import st_folium
 
 from app_state import (SAMPLE_DIR, add_station, defaults, glofas_dict, load_sample, meta_table, num, obs_wide,
                        page_setup, qc, registry, remove_station, update_station)
-from ews.data_io import load_glofas, load_station_observations
+from ews.data_io import load_glofas, load_station_observations, read_points
 from ews.geo import propose_point, search_river
 
 page_setup("Stations", icon="📂")
@@ -130,6 +130,30 @@ if submitted:
                                                 gl=(gl_f.name, gl_f.getvalue()) if gl_f is not None else None)
         except Exception as e:
             st.error(f"Lecture des observations impossible : {e}")
+
+with st.expander("📋 Importer une liste de stations (CSV ou Excel : ID, LONG, LAT)"):
+    st.caption("Pour ajouter plusieurs stations d'un coup, sans données : une ligne par station, avec son code, sa "
+               "longitude et sa latitude (et, si vous voulez, la rivière). Les noms de colonnes usuels sont reconnus "
+               "(ID/code/station/nom, LONG/lon/longitude/x, LAT/lat/latitude/y, rivière). Les stations importées "
+               "servent à la prévision ; leurs débits observés peuvent être ajoutés ensuite.")
+    st.download_button("Modèle de liste (CSV)", "ID,LONG,LAT,RIVIERE\nMUGERE,29.3542,-3.4801,Mugere\n"
+                       "JIJI,29.5823,-3.8870,Jiji\nMUREMBWE,29.4397,-4.0031,Murembwe\n", "liste_stations.csv",
+                       "text/csv")
+    pf = st.file_uploader("Liste des stations", type=["csv", "txt", "xlsx", "xls"], key="points_file")
+    if pf is not None:
+        try:
+            pts = read_points(pf)
+            st.dataframe(pts, hide_index=True, width="stretch")
+            if st.button(f"Ajouter ces {len(pts)} station(s)", type="primary"):
+                for r in pts.itertuples():
+                    if r.station in registry():
+                        update_station(r.station, lat=r.lat, lon=r.lon)
+                    else:
+                        add_station(r.station, r.river or r.station.title(), r.lat, r.lon, r.lat, r.lon, select=False)
+                st.success(f"{len(pts)} station(s) ajoutée(s) ou mise(s) à jour.")
+                st.rerun()
+        except Exception as e:
+            st.error(f"Lecture de la liste impossible : {e}")
 
 p = st.session_state.get("_pending")
 if p:

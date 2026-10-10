@@ -198,3 +198,18 @@ def forecast_panel(station: str, res: pd.DataFrame, q_obs: float, today, thresho
                       legend=dict(orientation="h", yanchor="top", y=-0.2, xanchor="left", x=0),
                       margin=dict(t=60, b=80))
     return fig
+
+
+def exceedance_bars(res: pd.DataFrame, station: str):
+    """Probability of exceeding the yellow / orange / red thresholds for each lead (ensemble members)."""
+    fig = go.Figure()
+    x = [f"J+{int(l)}<br>{pd.Timestamp(d):%d/%m}" for l, d in zip(res["lead"], res["valid_date"])]
+    for n, c in (("Jaune", "#fab219"), ("Orange", "#ec835a"), ("Rouge", "#d03b3b")):
+        col = f"p_{n}"
+        if col in res and res[col].notna().any():
+            fig.add_trace(go.Bar(x=x, y=res[col], name=f"seuil {n.lower()}", marker_color=c,
+                                 hovertemplate="%{y:.0f} %<extra>" + n + "</extra>"))
+    fig.update_layout(title=f"{station} – probabilité de dépasser chaque seuil ({int(res['n_membres'].max())} membres)",
+                      barmode="group", height=300, yaxis=dict(title="% des membres", range=[0, 100]),
+                      legend=dict(orientation="h", yanchor="top", y=-0.25, x=0), margin=dict(t=50, b=60))
+    return fig

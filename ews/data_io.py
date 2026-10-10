@@ -145,3 +145,48 @@ def load_station_observations(src, name: str | None = None, column: str | None =
     s[s < 0] = np.nan
     s.name = "Q"
     return s.dropna(), [str(c) for c in cols]
+
+
+# ------------------------------------------------------------------ list of stations (ID, LONG, LAT)
+_ID_ALIASES = ["id", "station", "code", "nom", "name", "point"]
+_LON_ALIASES = ["long", "lon", "longitude", "lng", "x"]
+_LAT_ALIASES = ["lat", "latitude", "y"]
+_RIV_ALIASES = ["riviere", "rivière", "river", "cours", "coursdeau"]
+
+
+def _pick(cols, aliases, required=True):
+    import re
+    norm = {re.sub(r"[^a-z0-9èé]", "", str(c).strip().lower()): c for c in cols}
+    for a in aliases:
+        if a in norm:
+            return norm[a]
+    for a in sorted(aliases, key=len, reverse=True):
+        for k, c in norm.items():
+            if len(a) > 1 and a in k:
+                return c
+    if required:
+        raise ValueError(f"colonne introuvable parmi {list(cols)} (attendu : {', '.join(aliases)})")
+    return None
+
+
+def read_points(src) -> pd.DataFrame:
+    """List of stations from a CSV/Excel file: columns ID, LONG, LAT (+ optional river).
+
+    Usual column names are recognised (ID/code/station/nom, LONG/lon/longitude/x, LAT/lat/latitude/y,
+    rivière/river). Returns columns station, river, lat, lon.
+    """
+    name = getattr(src, "name", str(src)) if not isinstance(src, (bytes, bytearray)) else "points.csv"
+    data = src.getvalue() if hasattr(src, "getvalue") else src
+    buf = io.BytesIO(data) if isinstance(data, (bytes, bytearray)) else data
+    df = pd.read_excel(buf) if str(name).lower().endswith((".xlsx", ".xls")) else pd.read_csv(buf, sep=None,
+                                                                                               engine="python")
+    c_id, c_lon, c_lat = _pick(df.columns, _ID_ALIASES), _pick(df.columns, _LON_ALIASES), _pick(df.columns, _LAT_ALIASES)
+    c_riv = _pick(df.columns, _RIV_ALIASES, required=False)
+    out = pd.DataFrame({"station": df[c_id].astype(str).str.strip().str.upper(),
+                        "river": df[c_riv].astype(str).str.strip() if c_riv else "",
+                        "lat": pd.to_numeric(df[c_lat], errors="coerce"),
+                        "lon": pd.to_numeric(df[c_lon], errors="coerce")})
+    bad = out[out["lat"].isna() | out["lon"].isna() | (out["lat"].abs() > 90) | (out["lon"].abs() > 180)]
+    if len(bad):
+        raise ValueError("coordonnées manquantes ou invalides pour : " + ", ".join(bad["station"]))
+    return out.drop_duplicates("station").reset_index(drop=True)

@@ -1,12 +1,15 @@
 """Edge cases (python tests/apptest_edge_cases.py):
 stations with empty (NaN) coordinates, and a forecast-only station without observations."""
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 import pandas as pd
 from streamlit.testing.v1 import AppTest
 
 ROOT = Path(__file__).parents[1]
+os.environ["GLOFAS_ARCHIVE"] = os.path.join(tempfile.mkdtemp(), "archive_test.csv")  # never touch the real archive
 sys.path.insert(0, str(ROOT))
 from ews.data_io import load_glofas, load_station_observations  # noqa: E402
 

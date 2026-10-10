@@ -87,6 +87,18 @@ La page 8 récupère la prévision GloFAS de trois façons :
 
 La clé Copernicus peut être configurée une fois pour toutes : sur Streamlit Cloud, *Settings → Secrets* avec `CDS_API_KEY = "votre-clé"` ; en local, dans le fichier `~/.cdsapirc` (`url: https://ewds.climate.copernicus.eu/api` et `key: votre-clé`).
 
+Requête Copernicus : jeu `cems-glofas-forecast`, `system_version: operational`, `hydrological_model: lisflood`, variable `river_discharge_in_the_last_24_hours`, une requête pour le contrôle et une pour les 50 membres perturbés, échéances 24 h à 720 h, NetCDF puis GRIB2 si besoin (lu avec cfgrib/ecCodes), `download_format: zip`. Une vérification réseau précède la requête (cdsapi retenterait sinon pendant des heures).
+
+### Recalage sur le réseau GloFAS, probabilités et seuils GloFAS
+
+Ces fonctions reprennent la démarche de la boîte à outils GloFAS de l'AGRHYMET :
+
+- **recalage** : parmi les mailles GloFAS situées dans un rayon donné autour de la station (5 km par défaut pour les nouvelles stations), celle de plus fort débit moyen est retenue ; statut `ok`, `recalé` ou `repli` affiché dans les messages ;
+- **probabilités de dépassement** : part des 51 membres (corrigés) au-dessus de chaque seuil, pour chaque échéance ;
+- **seuils GloFAS** : pour une station sans débits observés, seuils calculés sur la réanalyse GloFAS de la maille depuis 1991 (quantiles 80/90/98 % ou crues de 2, 5 et 20 ans, loi de Gumbel), comparés à la prévision brute (médiane de l'ensemble) ;
+- **carte de risque** de toutes les stations par échéance (onglet *Toutes les stations*) ;
+- **import d'une liste de stations** (CSV/Excel `ID, LONG, LAT`, noms de colonnes usuels reconnus).
+
 La correction utilise la prévision GloFAS téléchargée le jour même (valeur pour aujourd'hui et pour les jours suivants) et le débit observé du jour. Le fichier GloFAS historique ne sert qu'à évaluer la méthode sur le passé.
 
 L'application prend la maille la plus proche des coordonnées saisies et l'écrit dans la zone *Messages*.
@@ -124,7 +136,8 @@ ews/                   la méthodologie, indépendante de l'interface
   metrics.py           KGE, NSE, PBIAS, RSR, tableau de contingence
   statistics.py        Mann-Kendall modifié, Sen, Gumbel/GEV/Normale, jours critiques
   glofas_api.py        API Open-Meteo Flood (GloFAS v4), recherche de maille
-  glofas_netcdf.py     téléchargement Copernicus EWDS (cdsapi) et lecture des fichiers NetCDF
+  glofas_netcdf.py     téléchargement Copernicus EWDS (cdsapi), lecture NetCDF/GRIB/zip
+  snap.py              recalage d'une station sur le réseau GloFAS (rayon, débit moyen maximal)
   geo.py               carte Folium, tracé et recherche des rivières (OpenStreetMap), export GeoJSON
   animation.py         carte animée des débits (Plotly) et GIF (matplotlib)
   plots.py             graphiques Plotly interactifs

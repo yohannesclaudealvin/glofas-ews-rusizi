@@ -1,4 +1,6 @@
 import datetime as dt
+import os
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import folium
@@ -12,14 +14,14 @@ import forecast_batch
 from app_state import ROOT, add_station, chart, coords, num, obs_wide, page_setup, registry, thresholds
 from ews import theme as T
 from ews.animation import animated_figure
-from ews.correction import ForecastArchive, operational_forecast
+from ews.correction import ForecastArchive, exceedance, operational_forecast
 from ews.geo import fetch_rivers, match_river
-from ews.glofas_api import fetch_forecast
+from ews.glofas_api import climate_thresholds, fetch_forecast, snap_station
 from ews.glofas_netcdf import ZONES, configured_key, download_forecast, extract_point
-from ews.plots import forecast_panel
+from ews.plots import exceedance_bars, forecast_panel
 
 page_setup("Prévision des inondations", icon="🚨")
-ARCHIVE_FILE = ROOT / "archive" / "forecast_archive.csv"
+ARCHIVE_FILE = Path(os.environ.get("GLOFAS_ARCHIVE", ROOT / "archive" / "forecast_archive.csv"))
 TZ = ZoneInfo("Africa/Bujumbura")
 NEW = "— nouvelle station —"
 ICON = {"Vert": "🟢", "Jaune": "🟡", "Orange": "🟠", "Rouge": "🔴"}
@@ -34,6 +36,16 @@ def log(msg: str, level: str = "INFO"):
 @st.cache_data(ttl=3 * 3600, show_spinner=False)
 def auto_forecast(lat, lon, days, day):
     return fetch_forecast(lat, lon, past_days=3, forecast_days=min(days + 1, 30), ensemble=True)
+
+
+@st.cache_data(ttl=30 * 24 * 3600, show_spinner=False)
+def snapped(lat, lon, radius):
+    return snap_station(lat, lon, radius)
+
+
+@st.cache_data(ttl=30 * 24 * 3600, show_spinner=False)
+def glofas_thresholds(lat, lon, method):
+    return climate_thresholds(lat, lon, method)
 
 
 @st.cache_data(ttl=7 * 24 * 3600, show_spinner=False)
@@ -68,29 +80,44 @@ def raw_chart(raw):
     return fig
 
 
-def get_raw(source, name, lat, lon, nbr, run_day):
+STATUS = {"ok": "maille la plus proche", "recalé": "recalée sur le cours d'eau GloFAS",
+          "repli": "aucune maille de débit dans le rayon, maille la plus proche gardée"}
+
+
+def get_raw(source, name, lat, lon, nbr, run_day, radius=0.0):
     """Download (or read) the GloFAS forecast for the station cell. Returns the 'raw' record."""
     if source == "Automatique":
-        log(f"Connexion à GloFAS (API Open-Meteo) pour {name} ({lat:.4f}, {lon:.4f})…")
-        fc = auto_forecast(float(lat), float(lon), int(nbr), str(run_day))
+        cell, status, dist = (float(lat), float(lon)), "ok", 0.0
+        if radius > 0:
+            try:
+                sn = snapped(round(float(lat), 4), round(float(lon), 4), float(radius))
+                cell, status, dist = (sn["lat"], sn["lon"]), sn["status"], sn["distance_km"]
+            except Exception as e:
+                log(f"Recalage impossible ({e}) : maille la plus proche utilisée", "ATTENTION")
+        log(f"Connexion à GloFAS (API Open-Meteo) pour {name} ({cell[0]:.3f}, {cell[1]:.3f})…")
+        fc = auto_forecast(cell[0], cell[1], int(nbr), str(run_day))
         t0, label = pd.Timestamp(run_day), f"prévision du {run_day:%d/%m/%Y}, Open-Meteo"
-        cell = (lat, lon)
     else:
         if not st.session_state.get("nc"):
-            raise ValueError("aucun fichier NetCDF : cliquez sur OK pour le télécharger depuis Copernicus, "
+            raise ValueError("aucun fichier GloFAS : cliquez sur OK pour le télécharger depuis Copernicus, "
                              "ou chargez un fichier")
-        fc = extract_point(st.session_state["nc"][0], float(lat), float(lon))
+        fc = extract_point(st.session_state["nc"][0], float(lat), float(lon), radius_km=float(radius))
         t0, label = fc.index.min(), f"fichier {st.session_state['nc'][1]}"
         cell = fc.attrs.get("cell", (lat, lon))
+        status, dist = fc.attrs.get("status", "ok"), fc.attrs.get("distance_km", 0.0)
+    log(f"Maille GloFAS : {cell[0]:.3f}, {cell[1]:.3f} à {dist:.1f} km de la station "
+        f"({STATUS.get(status, status)}{f', rayon {radius:g} km' if radius else ''})",
+        "ATTENTION" if status == "repli" else "INFO")
     if t0 not in fc.index:
         raise ValueError(f"la prévision GloFAS ne contient pas la date {t0:%d/%m/%Y}")
     fut = fc[fc.index > t0]
-    nmem = "51 membres" if "river_discharge_max" in fc.columns else "contrôle seul"
+    nm = 1 + sum(c.startswith("river_discharge_member") for c in fc.columns)
+    nmem = f"{nm} membres" if nm > 1 else ("ensemble résumé" if "river_discharge_max" in fc.columns else "contrôle seul")
     log(f"GloFAS reçu : {label}, {len(fut)} jour(s) de prévision (du {fut.index.min():%d/%m} au "
         f"{fut.index.max():%d/%m}), {nmem}, maille {cell[0]:.3f}, {cell[1]:.3f} ; "
         f"débit GloFAS du jour {float(fc.loc[t0, 'river_discharge']):.2f} m³/s")
     return dict(fc=fc, t0=t0, label=label, name=name, lat=float(lat), lon=float(lon), source=source,
-                day=str(run_day))
+                day=str(run_day), cell=cell, radius=float(radius))
 
 
 if "fc_log" not in st.session_state:
@@ -153,10 +180,14 @@ with tab1:
                 b.write(""); b.write("")
                 cop_ok = b.button("OK", width="stretch", disabled=not key, key="cop_ok")
             else:
-                f = st.file_uploader("Fichier GloFAS (.nc ou .zip)", type=["nc", "nc4", "netcdf", "zip"])
-                if f is not None and st.session_state.get("nc", (None, ""))[1] != f.name:
-                    st.session_state["nc"] = (f.getvalue(), f.name)
-                    log(f"Fichier {f.name} chargé ({len(f.getvalue()) / 1e6:.1f} Mo)")
+                fs = st.file_uploader("Fichier(s) GloFAS : NetCDF, GRIB ou zip (contrôle et/ou membres perturbés)",
+                                      type=["nc", "nc4", "netcdf", "zip", "grib", "grib2", "grb"],
+                                      accept_multiple_files=True)
+                if fs:
+                    lab = " + ".join(f.name for f in fs)
+                    if st.session_state.get("nc", (None, ""))[1] != lab:
+                        st.session_state["nc"] = ([f.getvalue() for f in fs], lab)
+                        log(f"Fichier(s) chargé(s) : {lab} ({sum(len(f.getvalue()) for f in fs) / 1e6:.1f} Mo)")
             if source != "Automatique" and st.session_state.get("nc"):
                 st.caption(f"Fichier en mémoire : {st.session_state['nc'][1]}")
 
@@ -178,23 +209,51 @@ with tab1:
             lon = a.number_input("Longitude", value=c0[1], format="%.4f", step=0.01, key=f"lon_{choice}")
             lat = b.number_input("Latitude", value=c0[0], format="%.4f", step=0.01, key=f"lat_{choice}")
             verify = st.toggle("Vérifier la position sur le cours d'eau", value=False, key="one_verify")
+            radius = st.select_slider("Recalage sur le réseau GloFAS (rayon, km)", [0, 3, 5, 10, 15],
+                                      value=0 if choice in ("RUSIZI", "KABURANTWA", "MPANDA") else 5,
+                                      key=f"radius_{choice}",
+                                      help="0 = maille la plus proche. Sinon, parmi les mailles GloFAS dans ce rayon, "
+                                           "celle du plus fort débit moyen (la plus probable sur le cours d'eau).")
 
             st.markdown("Seuils d'alerte (m³/s)")
             th0 = thresholds(obs_wide(), choice) if choice != NEW else {}
-            d = {"Jaune": th0.get("Vigilance"), "Orange": th0.get("Alerte"), "Rouge": th0.get("Alerte maximale")}
+            TSRC = (["Historique observé (Q90, crues 2 et 5 ans)"] if th0 else []) + \
+                ["Historique GloFAS (quantiles 80/90/98 %)", "Historique GloFAS (crues 2, 5 et 20 ans)", "Saisie manuelle"]
+            tsrc = st.selectbox("Origine des seuils", TSRC, key=f"tsrc_{choice}",
+                                help="Les seuils GloFAS sont calculés sur la réanalyse GloFAS de la maille (depuis "
+                                     "1991) : utiles sans débits observés. Ils sont comparés à la prévision GloFAS "
+                                     "brute (même unité), les seuils observés à la prévision corrigée.")
+            th_raw = tsrc.startswith("Historique GloFAS")
+            if tsrc.startswith("Historique observé"):
+                d = {"Jaune": th0.get("Vigilance"), "Orange": th0.get("Alerte"), "Rouge": th0.get("Alerte maximale")}
+            elif th_raw:
+                d = {"Jaune": None, "Orange": None, "Rouge": None}
+                rawc = st.session_state.get("raw") or {}
+                xy = rawc.get("cell") if rawc.get("name") == (name or choice) else None
+                xy = xy or ((float(lat), float(lon)) if num(lat) is not None and num(lon) is not None else None)
+                if xy:
+                    try:
+                        with st.spinner("Calcul des seuils sur l'historique GloFAS…"):
+                            g = glofas_thresholds(round(xy[0], 3), round(xy[1], 3),
+                                                  "quantiles" if "quantiles" in tsrc else "periodes")
+                        d = {k: g[k] for k in ("Jaune", "Orange", "Rouge")}
+                        st.caption(f"Réanalyse GloFAS {g['period']} à la maille {xy[0]:.3f}, {xy[1]:.3f}.")
+                    except Exception as e:
+                        st.caption(f"Seuils GloFAS indisponibles : {e}")
+            else:
+                d = {"Jaune": None, "Orange": None, "Rouge": None}
             th = {}
             for n, colr in (("Rouge", "#d03b3b"), ("Orange", "#ec835a"), ("Jaune", "#fab219")):
                 a, b = st.columns([1, 2])
                 a.markdown(f"<div style='background:{colr};color:white;border-radius:4px;padding:6px 10px;"
                            f"margin-top:2px;font-weight:600'>{n}</div>", unsafe_allow_html=True)
                 th[n] = num(b.number_input(n, value=num(d[n]), format="%.2f", label_visibility="collapsed",
-                                           key=f"th_{n}_{choice}", placeholder="débit à partir duquel"))
+                                           key=f"th_{n}_{choice}_{TSRC.index(tsrc)}_{round(d[n] or 0, 2)}",
+                                           placeholder="débit à partir duquel"))
             st.markdown("<div style='background:#0ca30c;color:white;border-radius:4px;padding:6px 10px;"
                         "font-weight:600'>Vert : en dessous du seuil jaune</div>", unsafe_allow_html=True)
-            if choice != NEW and th0:
-                st.caption("Valeurs proposées d'après l'historique : Q90, crue de 2 ans, crue de 5 ans.")
-            elif not th0:
-                st.caption("Pas d'historique pour cette station : saisissez les seuils (sinon tout reste vert).")
+            if tsrc == "Saisie manuelle":
+                st.caption("Saisissez les seuils (sinon tout reste vert).")
 
             a, b = st.columns([3, 2])
             q_obs = a.number_input("Observation du jour (m³/s)", min_value=0.0, value=None, format="%.2f",
@@ -212,9 +271,10 @@ with tab1:
                 f"{lon_min:.2f}/{lon_max:.2f} E…")
             with st.spinner("Téléchargement GloFAS depuis Copernicus (une à quelques minutes)…"):
                 nc = download_forecast(key, nc_day, dict(lon_min=lon_min, lon_max=lon_max, lat_min=lat_min,
-                                                         lat_max=lat_max), days=30)
+                                                         lat_max=lat_max), days=30, log=log)
             st.session_state["nc"] = (nc, f"Copernicus {nc_day:%Y-%m-%d}")
-            log(f"Prévision GloFAS du {nc_day:%d/%m/%Y} téléchargée ({len(nc) / 1e6:.1f} Mo)")
+            log(f"Prévision GloFAS du {nc_day:%d/%m/%Y} téléchargée ({', '.join(nc)} ; "
+                f"{sum(len(v) for v in nc.values()) / 1e6:.1f} Mo)")
         except Exception as e:
             msg = str(e)
             if "licen" in msg.lower() or "403" in msg:
@@ -225,7 +285,7 @@ with tab1:
         try:
             if num(lat) is None or num(lon) is None:
                 raise ValueError("indiquez d'abord la longitude et la latitude de la station")
-            st.session_state["raw"] = get_raw(source, name or "Station", lat, lon, nbr, run_day)
+            st.session_state["raw"] = get_raw(source, name or "Station", lat, lon, nbr, run_day, radius)
             st.session_state.pop("one_res", None)
         except Exception as e:
             log(f"Téléchargement GloFAS impossible : {e}. Essayez la source Copernicus ou un fichier NetCDF.",
@@ -246,8 +306,9 @@ with tab1:
                 reg[choice]["cell_lat"], reg[choice]["cell_lon"] = float(lat), float(lon)
             raw = st.session_state.get("raw")
             if not (raw and raw["name"] == name and raw["lat"] == float(lat) and raw["lon"] == float(lon)
-                    and raw["source"] == source and (source != "Automatique" or raw["day"] == str(run_day))):
-                raw = get_raw(source, name, lat, lon, nbr, run_day)
+                    and raw["source"] == source and raw.get("radius") == float(radius)
+                    and (source != "Automatique" or raw["day"] == str(run_day))):
+                raw = get_raw(source, name, lat, lon, nbr, run_day, radius)
                 st.session_state["raw"] = raw
             fc, t0 = raw["fc"], raw["t0"]
             leads = list(range(1, int(nbr) + 1))
@@ -257,9 +318,17 @@ with tab1:
             res = operational_forecast(fc, t0, float(q_obs), past, station=name, leads=leads)
             if len(res) < len(leads):
                 log(f"La prévision ne couvre que {len(res)} jour(s) sur {len(leads)} demandés", "ATTENTION")
-            res["niveau"] = [f"{ICON[level(v, th)]} {level(v, th)}" for v in res["corrected"]]
-            worst = max((level(v, th) for v in res["corrected"]), key=["Vert", "Jaune", "Orange", "Rouge"].index)
+            res = exceedance(fc, res, th, raw=th_raw)
+            # values compared with the thresholds: corrected forecast (observed thresholds) or raw GloFAS
+            # ensemble median (GloFAS thresholds, same unit), as in the AGRHYMET toolkit
+            if th_raw:
+                ref = res["ens_median"].where(res["n_membres"] > 1, res["glofas_raw"])
+            else:
+                ref = res["corrected"]
+            res["niveau"] = [f"{ICON[level(v, th)]} {level(v, th)}" for v in ref]
+            worst = max((level(v, th) for v in ref), key=["Vert", "Jaune", "Orange", "Rouge"].index)
             st.session_state["one_res"] = dict(name=name, river=river, lat=float(lat), lon=float(lon), res=res,
+                                               th_raw=th_raw, tsrc=tsrc,
                                                q=float(q_obs), t0=t0, th=th,
                                                q_glofas_t0=float(fc.loc[t0, "river_discharge"]))
             i = res["corrected"].idxmax()
@@ -268,6 +337,11 @@ with tab1:
                 f"chaque échéance ({res['method'].iloc[0]})")
             log(f"Prévision exécutée pour {name} : maximum corrigé {res.loc[i, 'corrected']:.2f} m³/s le "
                 f"{pd.Timestamp(res.loc[i, 'valid_date']):%d/%m}, niveau {worst}")
+            if res["n_membres"].max() > 1 and res["p_Rouge"].notna().any():
+                k = res["p_Rouge"].idxmax()
+                log(f"Ensemble ({int(res['n_membres'].max())} membres) : probabilité maximale de dépasser le seuil "
+                    f"rouge {res.loc[k, 'p_Rouge']:.0f} % (J+{int(res.loc[k, 'lead'])}), seuil orange "
+                    f"{res['p_Orange'].max():.0f} %, seuil jaune {res['p_Jaune'].max():.0f} %")
             try:
                 ARCHIVE_FILE.parent.mkdir(exist_ok=True); ARCHIVE_FILE.write_bytes(arch.to_csv())
             except Exception:
@@ -284,12 +358,21 @@ with tab1:
             if out:
                 fig = forecast_panel(out["name"], out["res"], out["q"], out["t0"], out["th"], show)
                 chart(fig, key="one_chart")
+                if out.get("th_raw"):
+                    st.caption("Seuils issus de l'historique GloFAS : le niveau d'alerte est donné par la prévision "
+                               "GloFAS brute (médiane de l'ensemble), dans la même unité que ces seuils. Affichez "
+                               "« Brute » pour la comparer aux zones colorées.")
+                if "p_Rouge" in out["res"] and out["res"]["n_membres"].max() > 1:
+                    chart(exceedance_bars(out["res"], out["name"]), key="one_prob")
                 a, b, c = st.columns(3)
                 a.download_button("Télécharger le graphique (HTML)", fig.to_html(include_plotlyjs="cdn").encode(),
                                   f"prevision_{out['name']}_{out['t0']:%Y%m%d}.html", "text/html", width="stretch")
                 cols = {"lead": "Échéance (j)", "valid_date": "Date", "glofas_raw": "GloFAS brut",
                         "error_added": "Correction", "corrected": "Prévision corrigée", "niveau": "Niveau",
-                        "cor_min": "Ens. min", "cor_median": "Ens. médiane", "cor_max": "Ens. max", "method": "Méthode"}
+                        "cor_min": "Ens. min", "cor_median": "Ens. médiane", "cor_max": "Ens. max",
+                        "ens_median": "Médiane ensemble (niveau)" if out.get("th_raw") else "Médiane ens. corrigée",
+                        "p_Jaune": "P(jaune) %", "p_Orange": "P(orange) %", "p_Rouge": "P(rouge) %",
+                        "n_membres": "Membres", "method": "Méthode"}
                 tab = out["res"][[c for c in cols if c in out["res"].columns]].rename(columns=cols)
                 b.download_button("Télécharger les données (CSV)", tab.to_csv(index=False).encode(),
                                   f"prevision_{out['name']}_{out['t0']:%Y%m%d}.csv", "text/csv", width="stretch")

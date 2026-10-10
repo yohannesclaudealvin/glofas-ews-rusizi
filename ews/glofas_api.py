@@ -40,11 +40,73 @@ def _to_df(js: dict) -> pd.DataFrame:
 
 def fetch_forecast(lat: float, lon: float, past_days: int = 7, forecast_days: int = 8,
                    ensemble: bool = True) -> pd.DataFrame:
-    """Latest GloFAS forecast (today and the next `forecast_days - 1` days) + recent past."""
+    """Latest GloFAS forecast (today and the next `forecast_days - 1` days) + recent past.
+
+    With ensemble=True the 50 perturbed members are returned too (river_discharge_member01..50)
+    together with the ensemble statistics; river_discharge is the control run.
+    """
     params = {"latitude": lat, "longitude": lon,
               "daily": ",".join(ENSEMBLE_VARS if ensemble else ENSEMBLE_VARS[:1]),
               "past_days": past_days, "forecast_days": forecast_days}
+    if ensemble:
+        params["ensemble"] = "true"
     return _to_df(_get(params))
+
+
+def snap_station(lat: float, lon: float, radius_km: float, start: str | None = None, end: str | None = None):
+    """Snap a station onto the GloFAS network (Open-Meteo route): among the 0.05° cells within
+    radius_km, keep the one with the largest mean discharge over a recent period (reanalysis).
+    Returns dict(lat, lon, distance_km, status, table).
+    """
+    from .snap import candidate_cells, haversine_km
+    cells = candidate_cells(lat, lon, radius_km)
+    if start is None:
+        y = pd.Timestamp.today().year - 1
+        start, end = f"{y - 2}-01-01", f"{y}-12-31"
+    js = _get({"latitude": ",".join(str(c[0]) for c in cells), "longitude": ",".join(str(c[1]) for c in cells),
+               "daily": "river_discharge", "start_date": start, "end_date": end})
+    js = js if isinstance(js, list) else [js]
+    rows = []
+    for (la, lo), p in zip(cells, js):
+        q = pd.Series(p["daily"]["river_discharge"], dtype=float)
+        rows.append({"cell_lat": la, "cell_lon": lo, "q_mean": float(q.mean()) if q.notna().any() else np.nan,
+                     "distance_km": round(float(haversine_km(lat, lon, np.array([la]), np.array([lo]))[0]), 2)})
+    t = pd.DataFrame(rows)
+    near = t.sort_values("distance_km").iloc[0]
+    inside = t[(t["distance_km"] <= max(radius_km, 0)) & (t["q_mean"] > 0)]
+    if radius_km <= 0 or inside.empty:
+        best, status = near, ("ok" if radius_km <= 0 else "repli")
+    else:
+        best = inside.sort_values("q_mean", ascending=False).iloc[0]
+        status = "ok" if (best["cell_lat"], best["cell_lon"]) == (near["cell_lat"], near["cell_lon"]) else "recalé"
+    return dict(lat=float(best["cell_lat"]), lon=float(best["cell_lon"]), distance_km=float(best["distance_km"]),
+                status=status, table=t.sort_values("q_mean", ascending=False).reset_index(drop=True))
+
+
+def climate_thresholds(lat: float, lon: float, method: str = "quantiles", start: str = "1991-01-01",
+                       end: str | None = None) -> dict:
+    """Alert thresholds from the GloFAS reanalysis of the cell (no observations needed).
+
+    method "quantiles": daily quantiles 80 / 90 / 98 % (AGRHYMET toolkit default);
+    method "periodes"  : 2-, 5- and 20-year floods (Gumbel fitted on annual maxima), as GloFAS does.
+    Returns {"Jaune", "Orange", "Rouge", "n", "period"}; values are in GloFAS units (compare with raw GloFAS).
+    """
+    end = end or f"{pd.Timestamp.today().year - 1}-12-31"
+    q = fetch_history(lat, lon, start, end)["river_discharge"].dropna()
+    if len(q) < 365:
+        raise RuntimeError("historique GloFAS trop court pour calculer des seuils")
+    if method == "quantiles":
+        v = [float(q.quantile(x)) for x in (0.80, 0.90, 0.98)]
+        n = len(q)
+    else:
+        from scipy import stats
+        am = q.groupby(q.index.year).max()
+        am = am[q.groupby(q.index.year).size() > 300]
+        loc, scale = stats.gumbel_r.fit(am.values)
+        v = [float(stats.gumbel_r.ppf(1 - 1 / T, loc, scale)) for T in (2, 5, 20)]
+        n = len(am)
+    v = sorted(v)
+    return {"Jaune": v[0], "Orange": v[1], "Rouge": v[2], "n": n, "period": f"{q.index.min():%Y}–{q.index.max():%Y}"}
 
 
 def fetch_history(lat: float, lon: float, start: str, end: str) -> pd.DataFrame:

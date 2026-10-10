@@ -126,3 +126,30 @@ class ForecastArchive:
 
     def to_csv(self) -> bytes:
         return self.df.to_csv(index=False).encode()
+
+
+def member_columns(fc: pd.DataFrame) -> list[str]:
+    """Control run + perturbed members available in a forecast table."""
+    return ["river_discharge"] + [c for c in fc.columns if c.startswith("river_discharge_member")]
+
+
+def exceedance(fc: pd.DataFrame, res: pd.DataFrame, thresholds: dict, raw: bool = False) -> pd.DataFrame:
+    """Probability (fraction of the ensemble members) of exceeding each alert threshold, per lead.
+
+    The members are corrected with the same error as the control run (`error_added` of `res`),
+    unless raw=True (thresholds in GloFAS units, e.g. from the GloFAS reanalysis).
+    Returns res + n_membres, ens_median and p_Jaune / p_Orange / p_Rouge (in %).
+    """
+    out = res.copy()
+    cols = member_columns(fc)
+    rows = []
+    for _, r in res.iterrows():
+        tv = pd.Timestamp(r["valid_date"])
+        m = fc.loc[tv, cols].astype(float).dropna().values if tv in fc.index else np.array([])
+        m = np.maximum(m + (0.0 if raw else r["error_added"]), 0.0)
+        d = {"n_membres": len(m), "ens_median": float(np.median(m)) if len(m) else np.nan}
+        for n in ("Jaune", "Orange", "Rouge"):
+            v = thresholds.get(n)
+            d[f"p_{n}"] = float((m >= v).mean() * 100) if (v is not None and len(m)) else np.nan
+        rows.append(d)
+    return pd.concat([out.reset_index(drop=True), pd.DataFrame(rows)], axis=1)

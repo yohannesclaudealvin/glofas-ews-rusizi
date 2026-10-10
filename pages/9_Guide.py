@@ -38,6 +38,9 @@ Mugere, Jiji, Murembwe, Kanyosha, Dama, Nyengwe sont déjà dans la liste, et on
 - un fichier de débits observés (facultatif) : la date dans la première colonne, le débit en m³/s dans la deuxième ;
 - un fichier GloFAS historique (facultatif) : la date, puis les prévisions à 1, 2, … 7 jours (huit colonnes).
 
+Pour en ajouter beaucoup d'un coup, *Importer une liste de stations* accepte un fichier CSV ou Excel avec une
+ligne par station : code, longitude, latitude et, si on veut, la rivière.
+
 Une station sans fichier sert seulement à la prévision : il faut alors saisir soi-même ses seuils d'alerte. Avec les
 débits observés, l'application calcule les seuils et les tendances ; avec le fichier GloFAS historique en plus, elle
 évalue aussi la performance de la correction. Les positions proposées pour les nouvelles rivières sont approximatives :
@@ -72,6 +75,12 @@ réglages, à droite le graphique et les messages.
   la zone (Burundi entier, bassin de la Rusizi, sud du lac, autour de la station ou limites personnalisées) et la
   date, puis OK ; l'application récupère le fichier NetCDF officiel de GloFAS sur 30 jours. Cela prend d'une à
   quelques minutes. *Fichier NetCDF* : on charge un fichier déjà téléchargé (.nc, ou .zip qui le contient).
+- **Recalage sur le réseau GloFAS.** Les coordonnées d'une station tombent rarement pile sur la rivière telle que
+  GloFAS la dessine (mailles de 5 km). Avec un rayon de 5 ou 10 km, l'application regarde toutes les mailles
+  GloFAS de ce rayon et garde celle qui a le plus fort débit moyen, c'est-à-dire la plus probable sur le cours
+  d'eau. La zone *Messages* dit si la maille la plus proche a été gardée, si la station a été recalée, ou si
+  aucune maille du rayon n'avait de débit. Pour Rusizi, Kaburantwa et Mpanda, dont la maille a été vérifiée,
+  le rayon est à 0 par défaut.
 - **Prévision.** On choisit la station (ou « nouvelle station », avec son nom et sa rivière), on vérifie sa
   longitude et sa latitude, puis on règle les seuils. Au-dessus du seuil rouge le niveau est rouge, entre l'orange
   et le rouge il est orange, entre le jaune et l'orange il est jaune, et sous le seuil jaune tout est vert. On
@@ -82,6 +91,14 @@ réglages, à droite le graphique et les messages.
 - **Le graphique** montre l'observation du jour, la prévision brute, la prévision corrigée et la fourchette des
   51 scénarios, sur fond de couleurs d'alerte. On peut afficher la corrigée, la brute ou les deux, et tout
   télécharger : le graphique (HTML), les données (CSV) et l'archive.
+- **Origine des seuils.** Trois possibilités : les seuils tirés des débits observés (Q90, crues de 2 et 5 ans),
+  ceux tirés de l'historique GloFAS de la maille depuis 1991 (quantiles 80, 90 et 98 %, ou crues de 2, 5 et
+  20 ans comme le fait GloFAS), ou une saisie manuelle. Les seuils GloFAS servent quand la station n'a pas de
+  débits observés : ils sont alors comparés à la prévision GloFAS brute (médiane de l'ensemble), qui est dans la
+  même unité, et non à la prévision corrigée.
+- **Probabilités.** Avec les 51 scénarios de GloFAS, l'application compte, pour chaque jour, la part des
+  scénarios qui dépassent les seuils jaune, orange et rouge. « 30 % pour le seuil rouge à J+4 » veut dire que
+  15 scénarios sur 51 y dépassent ce seuil. C'est souvent plus parlant que la seule courbe centrale.
 - **Détail du calcul** (sous le graphique) montre les trois nombres qui font la correction : le débit observé
   aujourd'hui, le débit que GloFAS donnait pour aujourd'hui, et leur différence, ajoutée ensuite à chaque jour de
   la prévision. **Carte animée de la prévision** fait défiler les jours à venir sur la carte de la rivière.
@@ -90,7 +107,9 @@ réglages, à droite le graphique et les messages.
 
 *Toutes les stations* traite toutes les stations d'un coup. Le tableau *Stations à prévoir* reprend les stations
 chargées ; on peut y compléter des coordonnées ou ajouter n'importe quelle autre station du Burundi. On saisit le
-débit observé à chaque station et on lance le calcul ; un tableau résume le niveau d'alerte de chacune.
+débit observé à chaque station et on lance le calcul ; un tableau résume le niveau d'alerte de chacune, avec la
+probabilité maximale de dépasser le seuil rouge. En dessous, la *carte de risque par échéance* colore chaque
+rivière selon son niveau d'alerte et fait défiler les jours J+1 à J+7 ; elle se télécharge en page HTML.
 
 ### Obtenir une clé Copernicus
 
@@ -100,6 +119,15 @@ La voie *Automatique* suffit dans la plupart des cas. Pour travailler avec les f
 2. ouvrez le jeu de données *GloFAS forecasts* (`cems-glofas-forecast`) et acceptez sa licence en bas de la page
    *Download* (une seule fois) ;
 3. copiez votre clé personnelle (*API Token*) depuis votre profil et collez-la dans la page Prévision.
+
+Pour ne plus avoir à la recoller, on peut la configurer une fois pour toutes : sur Streamlit Cloud dans les
+secrets de l'application (`CDS_API_KEY`), ou sur un ordinateur dans le fichier `.cdsapirc` du dossier personnel
+(deux lignes : `url: https://ewds.climate.copernicus.eu/api` et `key: votre-clé`).
+
+L'application demande séparément la prévision de contrôle et les 50 membres perturbés, d'abord en NetCDF puis,
+si le catalogue le refuse, en GRIB2. Elle vérifie d'abord que le site Copernicus répond, pour ne pas rester
+bloquée quand la connexion est coupée. Un fichier déjà téléchargé (NetCDF, GRIB ou zip, contrôle et membres
+ensemble ou séparés) peut être chargé avec la source *Fichier NetCDF*.
 
 La clé n'est ni enregistrée ni affichée ; il faut la recoller à chaque visite.
 

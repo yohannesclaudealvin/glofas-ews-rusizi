@@ -1,5 +1,7 @@
 """Forecast of all stations at once (second tab of the forecast page)."""
 import datetime as dt
+import os
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import numpy as np
@@ -9,22 +11,30 @@ import streamlit as st
 from app_state import (ROOT, add_station, chart, coords, glofas_dict, num, obs_wide, performance, registry,
                        thresholds, update_station)
 from ews import theme as T
-from ews.correction import ForecastArchive, operational_forecast
+from ews.animation import animated_figure
+from ews.correction import ForecastArchive, exceedance, operational_forecast
+from ews.geo import fetch_rivers, match_river
 from ews.glofas_api import fetch_forecast
 from ews.plots import forecast_chart
 
 
-ARCHIVE_FILE = ROOT / "archive" / "forecast_archive.csv"
+ARCHIVE_FILE = Path(os.environ.get("GLOFAS_ARCHIVE", ROOT / "archive" / "forecast_archive.csv"))
 FR = {"lead": "Échéance (j)", "valid_date": "Date", "glofas_raw": "GloFAS brut", "error_added": "Correction",
       "method": "Méthode", "corrected": "Prévision corrigée", "cor_min": "Ens. min", "cor_p25": "Ens. p25",
       "cor_median": "Ens. médiane", "cor_p75": "Ens. p75", "cor_max": "Ens. max", "alert": "Alerte",
-      "alert (ensemble max)": "Alerte (ens. max)", "reliability": "Fiabilité historique"}
+      "alert (ensemble max)": "Alerte (ens. max)", "reliability": "Fiabilité historique", "n_membres": "Membres",
+      "ens_median": "Médiane ens. corrigée", "p_Jaune": "P(jaune) %", "p_Orange": "P(orange) %", "p_Rouge": "P(rouge) %"}
 ORDER = ["Normal", "Vigilance", "Alerte", "Alerte maximale"]
 
 
 @st.cache_data(ttl=3 * 3600, show_spinner=False)
 def get_fc(lat, lon, day):                     # `day` refreshes the cache every day
     return fetch_forecast(lat, lon, past_days=7, forecast_days=8, ensemble=True)
+
+
+@st.cache_data(ttl=7 * 24 * 3600, show_spinner=False)
+def _rivers(lat, lon):
+    return fetch_rivers(lat, lon, radius_m=15000)
 
 
 def level(q, th: dict) -> str:
@@ -158,6 +168,8 @@ def render():
                 if "cor_max" in res:
                     res["alert (ensemble max)"] = [label(level(v, th)) for v in res["cor_max"]]
                 res["reliability"] = [reliability(n, L) for L in res["lead"]]
+                jor = {"Jaune": th.get("Vigilance"), "Orange": th.get("Alerte"), "Rouge": th.get("Alerte maximale")}
+                res = exceedance(fc, res, {k: v for k, v in jor.items() if v is not None})
                 worst = max((level(v, th) for v in res["corrected"]), key=lambda a: ORDER.index(a) if a in ORDER else -1)
                 i = res["corrected"].idxmax()
                 results[n] = (res, float(q), th)
@@ -165,7 +177,9 @@ def render():
                                 "Observé aujourd'hui": float(q), "GloFAS aujourd'hui": float(fc.loc[t0, "river_discharge"]),
                                 "Correction": res["error_added"].iloc[0], "Max corrigé": res.loc[i, "corrected"],
                                 "Date du max": res.loc[i, "valid_date"],
-                                "Fiabilité J+1 / J+7": f"{res['reliability'].iloc[0]} / {res['reliability'].iloc[-1]}"})
+                                "Fiabilité J+1 / J+7": f"{res['reliability'].iloc[0]} / {res['reliability'].iloc[-1]}",
+                                "P(rouge) max (%)": res["p_Rouge"].max() if res["p_Rouge"].notna().any() else None,
+                                "Membres": int(res["n_membres"].iloc[0])})
         try:
             ARCHIVE_FILE.parent.mkdir(exist_ok=True); ARCHIVE_FILE.write_bytes(arch.to_csv())
         except Exception:
@@ -190,6 +204,37 @@ def render():
                     chart(forecast_chart(n, res, q, pd.Timestamp(day), th), key=f"fc_{n}")
                     st.dataframe(res.rename(columns=FR).round(2), width="stretch", hide_index=True)
                 allres.append(res.assign(station=n, issue_date=day, obs_today=q))
+            # ---------------------------------------------------------- risk map, one frame per lead day
+            st.subheader("🗺️ Carte de risque par échéance")
+            stns = []
+            for n, (res, q, th) in results.items():
+                sreg = registry().get(n, {})
+                if num(sreg.get("lat")) is None or num(sreg.get("lon")) is None:
+                    continue
+                try:
+                    ways = _rivers(round(sreg["lat"], 3), round(sreg["lon"], 3))
+                except Exception:
+                    ways = []
+                _, rw = match_river(ways, sreg.get("river", ""), n)
+                ser = pd.concat([pd.Series([q], index=[pd.Timestamp(day)]),
+                                 pd.Series(res["corrected"].values, index=pd.to_datetime(res["valid_date"]))])
+                stns.append(dict(name=n, river=sreg.get("river"), lat=sreg["lat"], lon=sreg["lon"], ways=rw,
+                                 series=ser, th={"Jaune": th.get("Vigilance"), "Orange": th.get("Alerte"),
+                                                 "Rouge": th.get("Alerte maximale")}))
+            if stns:
+                for s_ in stns:
+                    s_["th"] = {k: v for k, v in s_["th"].items() if v is not None}
+                fnames = [s_["name"] for s_ in stns]
+                focus = st.selectbox("Hydrogramme sous la carte", fnames, key="risk_focus") if len(fnames) > 1 else fnames[0]
+                rfig = animated_figure(stns, sorted(set().union(*[set(s_["series"].index) for s_ in stns])),
+                                       focus=fnames.index(focus), title="Niveau d'alerte prévu", height=680)
+                chart(rfig, key="risk_map")
+                st.caption("▶ Lecture fait défiler les échéances (J0 = observation du jour, puis J+1 … J+7). "
+                           "Couleur de la rivière et du point = niveau d'alerte de la prévision corrigée.")
+                st.download_button("⬇️ Carte de risque (HTML interactif)", rfig.to_html(include_plotlyjs="cdn").encode(),
+                                   f"carte_risque_{day}.html", "text/html")
+            else:
+                st.info("Ajoutez les coordonnées des stations pour afficher la carte de risque.")
             st.download_button("Télécharger les prévisions corrigées (CSV)", pd.concat(allres).to_csv(index=False).encode(),
                                f"prevision_corrigee_{day}.csv", "text/csv", type="primary")
         st.download_button("Télécharger l'archive mise à jour (forecast_archive.csv)", st.session_state["archive"].to_csv(),
